@@ -70,7 +70,7 @@ export function MetadataReview({
 			setError(null);
 			try {
 				const res = await fetch(
-					"http://127.0.0.1:8080/api/books/" + book.id + "/analyze",
+					"http://127.0.0.1:8080/api/books/" + book.id + "/research",
 					{
 						method: "POST",
 						headers: { "Content-Type": "application/json" },
