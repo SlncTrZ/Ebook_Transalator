@@ -159,15 +159,25 @@ export const translateProgress = (
 export const exportBook = (bookId: number) =>
 	request<{ path: string }>(`/export/${bookId}`, { method: "POST" });
 
-    // Connection test
-    export const testConnection = (vendor: string, apiKey: string, model: string) =>
-    	request<{ status: string; reply?: string; detail?: string }>("/test-connection", {
+// Connection test
+export const testConnection = (vendor: string, apiKey: string, model: string) =>
+	request<{ status: string; reply?: string; detail?: string }>(
+		"/test-connection",
+		{
+			method: "POST",
+			body: JSON.stringify({ vendor, api_key: apiKey, model }),
+		},
+	);
+
+    // Fetch models from vendor API
+    export const fetchVendorModels = (vendorId: string, apiKey: string) =>
+    	request<string[]>("/vendors/" + vendorId + "/models", {
     		method: "POST",
-    		body: JSON.stringify({ vendor, api_key: apiKey, model }),
+    		body: JSON.stringify({ vendor: vendorId, api_key: apiKey }),
     	});
 
     // Config
     export const listCategories = () => request<CategoryInfo>("/categories");
-export const listVendors = () => request<Vendor[]>("/vendors");
+    export const listVendors = () => request<Vendor[]>("/vendors");
 export const promptPreview = (category: string) =>
 	request<{ category: string; prompt: string }>(`/prompt-preview/${category}`);

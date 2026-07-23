@@ -60,6 +60,7 @@ class TestConnectionRequest(BaseModel):
     model: str = ""
     base_url: str = ""
 
+
 class VendorConfigRequest(BaseModel):
     vendor: str = "openai"
     api_key: str = ""
@@ -488,6 +489,7 @@ async def download_export(book_id: int):
 
 
 @app.get("/api/vendors")
+@app.get("/api/vendors")
 async def list_vendors() -> list[dict]:
     """Danh sach vendor AI ho tro."""
     from ebook_translator.translator.adapters import VENDORS
@@ -505,7 +507,48 @@ async def list_vendors() -> list[dict]:
         for v in VENDORS.values()
     ]
 
-@app.post("/api/test-connection")async def test_connection(req: TestConnectionRequest) -> dict:    """Test API connection voi vendor dang chon."""    from ebook_translator.translator.adapters import create_adapter    from ebook_translator.translator.prompts import get_system_prompt        adapter = create_adapter(        vendor_id=req.vendor,        api_key=req.api_key,        model=req.model or "gpt-4o-mini",        base_url=req.base_url or "",    )        test_messages = [        {"role": "system", "content": "You are a helpful assistant."},        {"role": "user", "content": "Reply with exactly: OK"},    ]        try:        import asyncio        result = await asyncio.wait_for(adapter.translate(test_messages), timeout=15)        return {"status": "ok", "reply": result[:100]}    except Exception as e:        return {"status": "error", "detail": str(e)[:200]}        
+
+@app.post("/api/vendors/{vendor_id}/models")
+async def get_vendor_models(vendor_id: str, req: TestConnectionRequest) -> list[str]:
+    """Fetch danh sach model that tu vendor API."""
+    from ebook_translator.translator.adapters import fetch_vendor_models
+    try:
+        models = await fetch_vendor_models(
+            vendor_id=vendor_id,
+            api_key=req.api_key,
+            base_url=req.base_url or None,
+        )
+        return models
+    except Exception:
+        return []
+
+
+@app.post("/api/test-connection")
+async def test_connection(req: TestConnectionRequest) -> dict:
+    """Test API connection voi vendor dang chon."""
+    from ebook_translator.translator.adapters import create_adapter
+
+    adapter = create_adapter(
+        vendor_id=req.vendor,
+        api_key=req.api_key,
+        model=req.model or "gpt-4o-mini",
+        base_url=req.base_url or "",
+    )
+
+    test_messages = [
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "Reply with exactly: OK"},
+    ]
+
+    try:
+        import asyncio
+
+        result = await asyncio.wait_for(adapter.translate(test_messages), timeout=15)
+        return {"status": "ok", "reply": result[:100]}
+    except Exception as e:
+        return {"status": "error", "detail": str(e)[:200]}
+
+
 @app.get("/api/categories")
 async def list_categories() -> dict[str, str]:
     return {c.value: CATEGORY_INFO[c] for c in BookCategory}
