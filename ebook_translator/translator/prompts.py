@@ -2,6 +2,7 @@
 
 Wing: tcdserver | Topic: ebook_translator | Updated: 2026-07-22 14:00
 """
+
 from __future__ import annotations
 
 from ebook_translator.models import BookCategory
@@ -42,7 +43,9 @@ PROMPTS: dict[BookCategory, str] = {
 }
 
 
-def get_system_prompt(category: BookCategory, source_lang: str = "en", target_lang: str = "vi") -> str:
+def get_system_prompt(
+    category: BookCategory, source_lang: str = "en", target_lang: str = "vi"
+) -> str:
     """Lấy system prompt phù hợp với thể loại sách."""
     template = PROMPTS.get(category, PROMPTS[BookCategory.GENERAL])
     return template.format(source_lang=source_lang, target_lang=target_lang)

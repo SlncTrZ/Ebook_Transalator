@@ -2,6 +2,7 @@
 
 Wing: tcdserver | Topic: ebook_translator | Updated: 2026-07-22 14:00
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -41,6 +42,7 @@ _cancel_event = asyncio.Event()
 
 # ── Request/Response models ──────────────────────────────────────────────
 
+
 class StartTranslateRequest(BaseModel):
     file_path: str
     api_key: str = ""
@@ -66,7 +68,21 @@ class UpdateBookRequest(BaseModel):
     target_lang: str | None = None
 
 
+class AnalyzeRequest(BaseModel):
+    api_key: str = ""
+    model: str = "gpt-4o-mini"
+
+
+class ConfirmMetadataRequest(BaseModel):
+    title: str = ""
+    author: str = ""
+    localized_title: str = ""
+    source_lang: str = "en"
+    category: str = "general"
+
+
 # ── Lifespan ─────────────────────────────────────────────────────────────
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator:
@@ -81,13 +97,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
 app = FastAPI(title="Ebook Translator API", version="0.2.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:1420", "http://127.0.0.1:1420", "tauri://localhost"],
+    allow_origins=[
+        "http://localhost:1420",
+        "http://127.0.0.1:1420",
+        "tauri://localhost",
+    ],
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────
+
 
 def _get_db() -> Database:
     if db is None:
@@ -99,11 +120,15 @@ def _get_parser(file_path: str):
     ext = Path(file_path).suffix.lower()
     parser = PARSERS.get(ext)
     if parser is None:
-        raise HTTPException(status_code=400, detail=f"Unsupported format: {ext}. Supported: {list(PARSERS)}")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported format: {ext}. Supported: {list(PARSERS)}",
+        )
     return parser
 
 
 # ── Books ────────────────────────────────────────────────────────────────
+
 
 @app.get("/api/books")
 async def list_books() -> list[dict]:
@@ -130,7 +155,12 @@ async def create_book(file_path: str = Query(...)) -> dict:
     book_id = await d.insert_book(book)
     chunks = chunk_book(book_id, parsed.chapters)
     await d.insert_chunks(chunks)
-    return {"id": book_id, "title": parsed.title, "chunks": len(chunks), "status": "pending"}
+    return {
+        "id": book_id,
+        "title": parsed.title,
+        "chunks": len(chunks),
+        "status": "pending",
+    }
 
 
 @app.get("/api/books/{book_id}")
@@ -162,7 +192,55 @@ async def update_book(book_id: int, req: UpdateBookRequest) -> dict:
     return {"ok": True}
 
 
+# ── Web Search + HITL (Phase 3) ───────────────────────────────────────────
+
+
+@app.post("/api/books/{book_id}/analyze")
+async def analyze_book(book_id: int, req: AnalyzeRequest) -> dict:
+    """Web Search Agent: phân tích metadata sách, đề xuất bản địa hóa."""
+    d = _get_db()
+    book = await d.get_book(book_id)
+    if book is None:
+        raise HTTPException(status_code=404, detail="Book not found")
+
+    api_key = req.api_key or os.environ.get("OPENAI_API_KEY", "")
+    if not api_key:
+        raise HTTPException(status_code=400, detail="API key required")
+
+    try:
+        preview = await get_preview_text(book.file_path)
+        result = await extract_metadata(preview=preview, api_key=api_key, model=req.model)
+        return {
+            "title": result.title or book.title,
+            "author": result.author or book.author,
+            "source_lang": result.source_lang,
+            "localized_title": result.localized_title,
+            "category": result.category,
+            "description": result.description,
+            "confidence": result.confidence,
+            "sources": result.sources,
+}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e)) from e
+
+@app.post("/api/books/{book_id}/confirm-metadata")
+async def confirm_metadata(book_id: int, req: ConfirmMetadataRequest) -> dict:
+    """HITL: Lưu metadata user đã duyệt vào DB."""
+    d = _get_db()
+    book = await d.get_book(book_id)
+    if book is None:
+        raise HTTPException(status_code=404, detail="Book not found")
+
+    await d.conn.execute(
+        "UPDATE books SET title=?, author=?, source_lang=?, category=? WHERE id=?",
+        (req.title or book.title, req.author or book.author, req.source_lang, req.category, book_id),
+    )
+    await d.conn.commit()
+    return {"ok": True}
+
+
 # ── Chunks ───────────────────────────────────────────────────────────────
+
 
 @app.get("/api/books/{book_id}/chunks")
 async def list_chunks(book_id: int, status: str | None = None) -> list[dict]:
@@ -180,11 +258,20 @@ async def list_chunks(book_id: int, status: str | None = None) -> list[dict]:
 
 # ── Glossary ─────────────────────────────────────────────────────────────
 
+
 @app.get("/api/books/{book_id}/glossary")
 async def get_glossary(book_id: int) -> list[dict]:
     d = _get_db()
     entries = await d.get_glossary(book_id)
-    return [{"id": e.id, "source_term": e.source_term, "target_term": e.target_term, "notes": e.notes} for e in entries]
+    return [
+        {
+            "id": e.id,
+            "source_term": e.source_term,
+            "target_term": e.target_term,
+            "notes": e.notes,
+        }
+        for e in entries
+    ]
 
 
 @app.post("/api/glossary")
@@ -208,6 +295,7 @@ async def delete_glossary(entry_id: int) -> dict:
 
 # ── Translation ──────────────────────────────────────────────────────────
 
+
 @app.post("/api/translate/start")
 async def start_translate(req: StartTranslateRequest) -> dict:
     global active_pipeline, active_book_id, _cancel_event
@@ -221,7 +309,9 @@ async def start_translate(req: StartTranslateRequest) -> dict:
     _cancel_event.clear()
 
     # Find or create book
-    cursor = await d.conn.execute("SELECT id FROM books WHERE file_path = ?", (req.file_path,))
+    cursor = await d.conn.execute(
+        "SELECT id FROM books WHERE file_path = ?", (req.file_path,)
+    )
     row = await cursor.fetchone()
     if row:
         book_id = row["id"]
@@ -234,7 +324,9 @@ async def start_translate(req: StartTranslateRequest) -> dict:
             author=parsed.author,
             source_lang=req.source_lang,
             target_lang=req.target_lang,
-            category=BookCategory(req.category) if req.category else BookCategory.GENERAL,
+            category=BookCategory(req.category)
+            if req.category
+            else BookCategory.GENERAL,
         )
         book_id = await d.insert_book(book)
         chunks = chunk_book(book_id, parsed.chapters)
@@ -302,6 +394,7 @@ async def cancel_translate() -> dict:
 @app.get("/api/translate/progress/{book_id}")
 async def translate_progress(book_id: int):
     """SSE endpoint — push realtime progress updates."""
+
     async def event_generator() -> AsyncGenerator:
         d = _get_db()
         while True:
@@ -315,7 +408,10 @@ async def translate_progress(book_id: int):
             )
             row = await cursor.fetchone()
             if row is None:
-                yield {"event": "error", "data": json.dumps({"error": "Book not found"})}
+                yield {
+                    "event": "error",
+                    "data": json.dumps({"error": "Book not found"}),
+                }
                 return
 
             data = {
@@ -337,6 +433,7 @@ async def translate_progress(book_id: int):
 
 # ── Export ───────────────────────────────────────────────────────────────
 
+
 @app.post("/api/export/{book_id}")
 async def export_book(book_id: int) -> dict:
     d = _get_db()
@@ -357,11 +454,16 @@ async def download_export(book_id: int):
     src = Path(book.file_path)
     output = str(src.parent / f"{src.stem}_vn{src.suffix}")
     if not Path(output).exists():
-        raise HTTPException(status_code=404, detail="Export file not found, run export first")
-    return FileResponse(output, media_type="application/epub+zip", filename=Path(output).name)
+        raise HTTPException(
+            status_code=404, detail="Export file not found, run export first"
+        )
+    return FileResponse(
+        output, media_type="application/epub+zip", filename=Path(output).name
+    )
 
 
 # ── Info / Config ────────────────────────────────────────────────────────
+
 
 @app.get("/api/categories")
 async def list_categories() -> dict[str, str]:
@@ -373,7 +475,9 @@ async def prompt_preview(category: str) -> dict:
     try:
         cat = BookCategory(category)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=f"Invalid category: {category}") from e
+        raise HTTPException(
+            status_code=400, detail=f"Invalid category: {category}"
+        ) from e
     prompt = get_system_prompt(cat)
     return {"category": category, "prompt": prompt}
 
@@ -382,6 +486,7 @@ async def prompt_preview(category: str) -> dict:
 
 if __name__ == "__main__":
     import uvicorn
+
     try:
         port = int(os.environ.get("ET_PORT", "8080"))
     except (ValueError, TypeError):
