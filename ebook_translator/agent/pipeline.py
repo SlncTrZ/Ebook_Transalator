@@ -7,6 +7,7 @@ Thiết kế:
 
 Wing: tcdserver | Topic: ebook_translator | Updated: 2026-07-22 14:00
 """
+
 from __future__ import annotations
 
 import json
@@ -27,6 +28,7 @@ MAX_RETRIES = 2  # Số lần retry tối đa khi validation fail
 @dataclass
 class AgentContext:
     """Xuyên suốt pipeline."""
+
     book_id: int = 0
     title: str = ""
     author: str = ""
@@ -47,6 +49,7 @@ class AgentContext:
 
 
 # ─── Tool: Gọi LLM ───────────────────────────────────────────────────────
+
 
 async def _call_llm(
     messages: list[dict],
@@ -105,7 +108,9 @@ async def research_agent(preview: str, ctx: AgentContext) -> AgentContext:
         {"role": "system", "content": RESEARCH_SYSTEM},
         {"role": "user", "content": user},
     ]
-    raw = await _call_llm(messages, ctx, response_format={"type": "json_object"}, temperature=0.2)
+    raw = await _call_llm(
+        messages, ctx, response_format={"type": "json_object"}, temperature=0.2
+    )
 
     try:
         parsed = json.loads(raw)
@@ -133,13 +138,18 @@ async def research_agent(preview: str, ctx: AgentContext) -> AgentContext:
 
             user2 = f"[Additional Results for: {query}]\n"
             for r in results[:3]:
-                user2 += f"- {r.get('title','')}: {r.get('content','')[:300]}\n"
+                user2 += f"- {r.get('title', '')}: {r.get('content', '')[:300]}\n"
             user2 += "\nUpdate metadata based on these results. Return JSON."
             messages2 = [
-                {"role": "system", "content": "Update book metadata based on search results. Return JSON."},
+                {
+                    "role": "system",
+                    "content": "Update book metadata based on search results. Return JSON.",
+                },
                 {"role": "user", "content": user2},
             ]
-            raw2 = await _call_llm(messages2, ctx, response_format={"type": "json_object"}, temperature=0.2)
+            raw2 = await _call_llm(
+                messages2, ctx, response_format={"type": "json_object"}, temperature=0.2
+            )
             try:
                 p2 = json.loads(raw2)
                 ctx.title = p2.get("title_original", ctx.title)
@@ -152,7 +162,12 @@ async def research_agent(preview: str, ctx: AgentContext) -> AgentContext:
         except Exception as e:
             logger.warning("[Research] Re-search failed: %s", e)
 
-    logger.info("[Research] Done: %s | %s | %d terms", ctx.title, ctx.author, len(ctx.glossary_terms))
+    logger.info(
+        "[Research] Done: %s | %s | %d terms",
+        ctx.title,
+        ctx.author,
+        len(ctx.glossary_terms),
+    )
     return ctx
 
 
@@ -186,7 +201,9 @@ async def translate_agent_with_validation(
     # 1. Cache check
     cached = await db.get_cached(
         content_hash=chunk.content_hash,
-        source=ctx.source_lang, target=ctx.target_lang, model=ctx.model,
+        source=ctx.source_lang,
+        target=ctx.target_lang,
+        model=ctx.model,
     )
     if cached is not None:
         logger.info("[Translate] Cache HIT %s", chunk.content_hash[:12])
@@ -224,28 +241,40 @@ async def translate_agent_with_validation(
     # 2. Translate
     result = await _call_llm(messages, ctx, temperature=0.3)
 
-    # 3. Deterministic Validation
+    # 3. Deterministic Validation — chỉ check terms CÓ trong source text
     for attempt in range(MAX_RETRIES):
-        missing = check_glossary_terms(result, all_terms)
+        missing = check_glossary_terms(chunk.original_text, result, all_terms)
         if not missing:
             break
 
-        logger.warning("[Validate] Missing terms (attempt %d): %s", attempt + 1, missing)
+        logger.warning(
+            "[Validate] Missing terms (attempt %d/%d): %s",
+            attempt + 1, MAX_RETRIES, missing,
+        )
         retry_prompt = build_retry_prompt(chunk.original_text, result, missing)
         messages = [
-            {"role": "system", "content": TRANSLATE_SYSTEM + "\nIMPORTANT: The previous attempt MISSED some required glossary terms. Include them this time."},
+            {
+                "role": "system",
+                "content": TRANSLATE_SYSTEM
+                + "\nIMPORTANT: The previous attempt MISSED glossary terms. Include them this time.",
+            },
             {"role": "user", "content": retry_prompt},
         ]
         result = await _call_llm(messages, ctx, temperature=0.3)
 
     if missing:
-        logger.warning("[Validate] Still missing after %d retries: %s", MAX_RETRIES, missing)
+        logger.warning(
+            "[Validate] Still missing after %d retries (continuing): %s",
+            MAX_RETRIES, missing,
+        )
 
     # 4. Save cache
     cache_entry = CacheEntry(
         content_hash=chunk.content_hash,
-        source_lang=ctx.source_lang, target_lang=ctx.target_lang,
-        model=ctx.model, translated_text=result,
+        source_lang=ctx.source_lang,
+        target_lang=ctx.target_lang,
+        model=ctx.model,
+        translated_text=result,
     )
     await db.set_cached(cache_entry)
 

@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 import type { Book } from "../api";
-import { listBooks, createBook, uploadBook } from "../api";
+import { listBooks, createBook, uploadBook, deleteBook } from "../api";
 
 const TEST_FILES = [
 	"H:\\Develop\\Ebook_Transalator\\tests\\[修真·仙侠] 《红尘魔道（第二部）》 作者：狗狗执行官.txt",
@@ -156,9 +156,15 @@ export function Library({ onSelectBook, selectedBook }: LibraryProps) {
 										: "—"}
 								</td>
 								<td>
-									<button onClick={() => onSelectBook(book)}>Translate</button>
-								</td>
-							</tr>
+    								<button onClick={() => onSelectBook(book)}>Translate</button>
+    								<button onClick={async () => {
+    									if (confirm('Delete this book and all translations?')) {
+    										await deleteBook(book.id);
+    										loadBooks();
+    									}
+    								}} className="btn-small" style={{ marginLeft: 4, color: '#f85149' }}>🗑</button>
+    							</td>
+    						</tr>
 						))}
 					</tbody>
 				</table>

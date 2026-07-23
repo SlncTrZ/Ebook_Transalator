@@ -88,6 +88,9 @@ export const updateBook = (id: number, data: Partial<Book>) =>
 		body: JSON.stringify(data),
 	});
 
+export const deleteBook = (id: number) =>
+	request<{ ok: boolean }>(`/books/${id}`, { method: "DELETE" });
+
 // Chunks
 export const listChunks = (bookId: number, status?: string) => {
 	const qs = status ? `?status=${status}` : "";

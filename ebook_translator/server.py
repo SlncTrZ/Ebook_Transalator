@@ -251,6 +251,17 @@ async def get_book(book_id: int) -> dict:
     return {k: v for k, v in book.__dict__.items() if not k.startswith("_")}
 
 
+@app.delete("/api/books/{book_id}")
+async def delete_book(book_id: int) -> dict:
+    """Xoa sach khoi thu vien."""
+    d = _get_db()
+    await d.conn.execute("DELETE FROM glossary WHERE book_id = ?", (book_id,))
+    await d.conn.execute("DELETE FROM chunks WHERE book_id = ?", (book_id,))
+    await d.conn.execute("DELETE FROM books WHERE id = ?", (book_id,))
+    await d.conn.commit()
+    return {"ok": True}
+
+
 @app.patch("/api/books/{book_id}")
 async def update_book(book_id: int, req: UpdateBookRequest) -> dict:
     d = _get_db()
@@ -341,22 +352,28 @@ async def research_book(book_id: int, req: AnalyzeRequest) -> dict:
     if not api_key:
         raise HTTPException(status_code=400, detail="API key required")
 
-    base_url = req.base_url or (VENDORS.get(req.vendor).base_url if VENDORS.get(req.vendor) else "")
-    model = req.model or (VENDORS.get(req.vendor).default_model if VENDORS.get(req.vendor) else "gpt-4o-mini")
+    base_url = req.base_url or (
+        VENDORS.get(req.vendor).base_url if VENDORS.get(req.vendor) else ""
+    )
+    model = req.model or (
+        VENDORS.get(req.vendor).default_model
+        if VENDORS.get(req.vendor)
+        else "gpt-4o-mini"
+    )
 
     ctx = AgentContext(book_id=book_id, api_key=api_key, model=model, base_url=base_url)
     preview = await get_preview_text(book.file_path)
     ctx = await research_agent(preview, ctx)
 
     return {
-    "title": ctx.title,
-    "author": ctx.author,
-    "source_lang": ctx.source_lang,
-    "target_lang": ctx.target_lang,
-    "category": ctx.category,
-    "description": ctx.book_summary,
-    "style_notes": ctx.style_notes,
-    "glossary_suggestions": ctx.glossary_terms,
+        "title": ctx.title,
+        "author": ctx.author,
+        "source_lang": ctx.source_lang,
+        "target_lang": ctx.target_lang,
+        "category": ctx.category,
+        "description": ctx.book_summary,
+        "style_notes": ctx.style_notes,
+        "glossary_suggestions": ctx.glossary_terms,
     }
 
 
@@ -538,10 +555,14 @@ async def cancel_translate() -> dict:
         active_pipeline = None
     return {"status": "cancelled"}
 
+
 @app.post("/api/translate/agentic")
 async def translate_agentic(req: StartTranslateRequest) -> dict:
     """Translate Agent + Deterministic Validation."""
-    from ebook_translator.agent.pipeline import AgentContext, translate_agent_with_validation
+    from ebook_translator.agent.pipeline import (
+        AgentContext,
+        translate_agent_with_validation,
+    )
 
     global active_pipeline, active_book_id, _cancel_event
     d = _get_db()
@@ -551,8 +572,14 @@ async def translate_agentic(req: StartTranslateRequest) -> dict:
     await asyncio.sleep(0.5)
     _cancel_event.clear()
 
-    api_key = req.api_key or os.environ.get("OPENAI_API_KEY", "") or os.environ.get("API_KEY", "")
-    cursor = await d.conn.execute("SELECT id FROM books WHERE file_path = ?", (req.file_path,))
+    api_key = (
+        req.api_key
+        or os.environ.get("OPENAI_API_KEY", "")
+        or os.environ.get("API_KEY", "")
+    )
+    cursor = await d.conn.execute(
+        "SELECT id FROM books WHERE file_path = ?", (req.file_path,)
+    )
     row = await cursor.fetchone()
     if not row:
         raise HTTPException(status_code=404, detail="Book not found, import first")
@@ -564,34 +591,49 @@ async def translate_agentic(req: StartTranslateRequest) -> dict:
         raise HTTPException(status_code=404)
 
     ctx = AgentContext(
-    book_id=book_id, api_key=api_key, model=req.model or "gpt-4o-mini",
-    source_lang=book.source_lang, target_lang=book.target_lang,
-    category=book.category, base_url=req.base_url,
-    title=book.title, author=book.author,
+        book_id=book_id,
+        api_key=api_key,
+        model=req.model or "gpt-4o-mini",
+        source_lang=book.source_lang,
+        target_lang=book.target_lang,
+        category=book.category,
+        base_url=req.base_url,
+        title=book.title,
+        author=book.author,
     )
 
-    asyncio.create_task(_run_agentic_translate(d, book_id, ctx, req.chapter_start, req.chapter_end))
+    asyncio.create_task(
+        _run_agentic_translate(d, book_id, ctx, req.chapter_start, req.chapter_end)
+    )
     return {"book_id": book_id, "status": "agentic_started"}
 
 
 async def _run_agentic_translate(
-    d: Database, book_id: int, ctx: AgentContext,
-    chapter_start: int, chapter_end: int,
+    d: Database,
+    book_id: int,
+    ctx: AgentContext,
+    chapter_start: int,
+    chapter_end: int,
 ) -> None:
     """Background task: Translate Agent + Validation."""
     from ebook_translator.agent.pipeline import translate_agent_with_validation
+
     try:
         glossary = await d.get_glossary(book_id)
         pending = await d.get_pending_chunks(book_id)
         if chapter_end < 99999 or chapter_start > 0:
-            pending = [c for c in pending if chapter_start <= c.chapter_idx + 1 <= chapter_end]
+            pending = [
+                c for c in pending if chapter_start <= c.chapter_idx + 1 <= chapter_end
+            ]
         ctx.total_chunks = len(pending)
 
         for chunk in pending:
             if _cancel_event.is_set():
                 break
             try:
-                translated = await translate_agent_with_validation(chunk, glossary, ctx, d)
+                translated = await translate_agent_with_validation(
+                    chunk, glossary, ctx, d
+                )
                 if chunk.id is not None:
                     await d.update_chunk_result(chunk.id, translated, "done")
                 ctx.done_chunks += 1
@@ -606,6 +648,8 @@ async def _run_agentic_translate(
     finally:
         global active_pipeline
         active_pipeline = None
+
+
 @app.get("/api/translate/progress/{book_id}")
 async def translate_progress(book_id: int):
     """SSE endpoint — push realtime progress updates."""
