@@ -716,6 +716,7 @@ async def _run_agentic_translate(
 @app.get("/api/translate/progress/{book_id}")
 async def translate_progress(book_id: int):
     """SSE endpoint — push realtime progress updates."""
+
     async def event_generator() -> AsyncGenerator:
         d = _get_db()
         while True:
@@ -729,7 +730,10 @@ async def translate_progress(book_id: int):
             )
             row = await cursor.fetchone()
             if row is None:
-                yield {"event": "error", "data": json.dumps({"error": "Book not found"})}
+                yield {
+                    "event": "error",
+                    "data": json.dumps({"error": "Book not found"}),
+                }
                 return
 
             data = {
@@ -751,20 +755,44 @@ async def translate_progress(book_id: int):
 
 @app.get("/api/translate/status/{book_id}")
 async def translate_status(book_id: int) -> dict:
-    """Polling endpoint — tra ve progress duoi dang JSON."""
+    """Polling endpoint — đếm done/failed trực tiếp từ chunks table."""
     d = _get_db()
     cursor = await d.conn.execute(
-        "SELECT total_chunks, done_chunks, failed_chunks, status FROM books WHERE id = ?",
+        "SELECT COUNT(*) as cnt FROM chunks WHERE book_id = ? AND status = 'done'",
         (book_id,),
     )
     row = await cursor.fetchone()
-    if row is None:
-        return {"total": 0, "done": 0, "failed": 0, "status": "not_found"}
+    done = row["cnt"] if row else 0
+    cursor = await d.conn.execute(
+        "SELECT COUNT(*) as cnt FROM chunks WHERE book_id = ? AND status = 'failed'",
+        (book_id,),
+    )
+    row = await cursor.fetchone()
+    failed = row["cnt"] if row else 0
+    cursor = await d.conn.execute(
+        "SELECT COUNT(*) as cnt FROM chunks WHERE book_id = ?",
+        (book_id,),
+    )
+    row = await cursor.fetchone()
+    total = row["cnt"] if row else 0
+    cursor = await d.conn.execute(
+        "SELECT status FROM books WHERE id = ?",
+        (book_id,),
+    )
+    book_row = await cursor.fetchone()
+    status = book_row["status"] if book_row else "not_found"
+
+    # Auto-update status neu done + failed = total
+    if total > 0 and done + failed >= total:
+        status = "failed" if failed > 0 else "done"
+        await d.conn.execute("UPDATE books SET status = ? WHERE id = ?", (status, book_id))
+        await d.conn.commit()
+
     return {
-        "total": row["total_chunks"],
-        "done": row["done_chunks"],
-        "failed": row["failed_chunks"],
-        "status": row["status"],
+        "total": total,
+        "done": done,
+        "failed": failed,
+        "status": status,
     }
 
 

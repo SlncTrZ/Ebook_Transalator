@@ -156,32 +156,34 @@ export const startTranslate = (
 export const cancelTranslate = () =>
 	request<{ status: string }>("/translate/cancel", { method: "POST" });
 
-    export const translateProgress = (
-    	bookId: number,
-    	onProgress: (data: ProgressData) => void,
-    	onComplete: () => void,
-    	onError: (err: string) => void,
-    ) => {
-    	// Polling thay vi SSE (tranh loi Connection lost)
-    	let cancelled = false;
-    	const poll = async () => {
-    		if (cancelled) return;
-    		try {
-    			const data = await request<ProgressData>(`/translate/status/${bookId}`);
-    			onProgress(data);
-    			if (data.status === "done" || data.status === "failed") {
-    				onComplete();
-    				return;
-    			}
-    		} catch (e) {
-    			onError("Connection lost");
-    			return;
-    		}
-    		if (!cancelled) setTimeout(poll, 1500);
-    	};
-    	setTimeout(poll, 500);
-    	return () => { cancelled = true; };
-    };
+export const translateProgress = (
+	bookId: number,
+	onProgress: (data: ProgressData) => void,
+	onComplete: () => void,
+	onError: (err: string) => void,
+) => {
+	// Polling thay vi SSE (tranh loi Connection lost)
+	let cancelled = false;
+	const poll = async () => {
+		if (cancelled) return;
+		try {
+			const data = await request<ProgressData>(`/translate/status/${bookId}`);
+			onProgress(data);
+			if (data.status === "done" || data.status === "failed") {
+				onComplete();
+				return;
+			}
+		} catch (e) {
+			onError("Connection lost");
+			return;
+		}
+		if (!cancelled) setTimeout(poll, 1500);
+	};
+	setTimeout(poll, 500);
+	return () => {
+		cancelled = true;
+	};
+};
 
 // Export
 export const exportBook = (bookId: number) =>
