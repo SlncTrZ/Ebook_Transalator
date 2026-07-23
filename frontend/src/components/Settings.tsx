@@ -24,9 +24,12 @@ export function Settings({
 		"idle" | "testing" | "ok" | "error"
 	>("idle");
 	const [testMsg, setTestMsg] = useState("");
-	const [liveModels, setLiveModels] = useState<string[] | null>(null);
-	const [fetchingModels, setFetchingModels] = useState(false);
-	const [serverRunning, setServerRunning] = useState(false);
+    const storedModels = localStorage.getItem('et_models_' + vendor);
+    const [liveModels, setLiveModels] = useState<string[] | null>(
+    	storedModels ? JSON.parse(storedModels) : null
+    );
+    const [fetchingModels, setFetchingModels] = useState(false);
+    const [serverRunning, setServerRunning] = useState(false);
 
 	useEffect(() => {
 		listVendors()
@@ -60,6 +63,7 @@ export function Settings({
 		if (v) onModelChange(v.default_model);
 		setTestStatus("idle");
 		setLiveModels(null);
+		localStorage.removeItem('et_models_' + newVendor);
 	};
 
 	const handleTest = async () => {
@@ -74,8 +78,11 @@ export function Settings({
 				// Fetch live models sau khi test OK
 				setFetchingModels(true);
 				try {
-					const models = await fetchVendorModels(vendor, apiKey);
-					if (models.length > 0) setLiveModels(models);
+    				const models = await fetchVendorModels(vendor, apiKey);
+    				if (models.length > 0) {
+    					setLiveModels(models);
+    					localStorage.setItem('et_models_' + vendor, JSON.stringify(models));
+    				}
 				} catch (e) {
 					console.error("Failed to fetch models", e);
 				}
