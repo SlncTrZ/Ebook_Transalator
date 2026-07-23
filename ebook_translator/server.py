@@ -816,7 +816,9 @@ async def translate_status(book_id: int) -> dict:
     # Auto-update status neu done + failed = total
     if total > 0 and done + failed >= total:
         status = "failed" if failed > 0 else "done"
-        await d.conn.execute("UPDATE books SET status = ? WHERE id = ?", (status, book_id))
+        await d.conn.execute(
+            "UPDATE books SET status = ? WHERE id = ?", (status, book_id)
+        )
         await d.conn.commit()
 
     return {

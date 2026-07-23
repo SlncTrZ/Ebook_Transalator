@@ -192,19 +192,21 @@ async def research_agent(preview: str, ctx: AgentContext) -> AgentContext:
 
 # ─── Agent 2: Translate Agent (with Deterministic Validation) ────────────
 
-TRANSLATE_SYSTEM = """You are a professional literary translator.
 
-Context:
-- Book title, author, genre
-- Glossary terms that MUST appear in the translation
-- Style notes
+# System prompt được lấy động từ prompts.py theo category
+def _get_translate_system(ctx: AgentContext) -> str:
+    from ebook_translator.translator.prompts import get_system_prompt
+    from ebook_translator.models import BookCategory
 
-Rules:
-1. Use ALL glossary terms exactly as given
-2. Capitalize first letter of each word for names/skills/items
-3. Preserve meaning, tone, style
-4. Return ONLY the translated text
-"""
+    try:
+        cat = BookCategory(ctx.category)
+    except ValueError:
+        cat = BookCategory.GENERAL
+    prompt = get_system_prompt(cat, ctx.source_lang, ctx.target_lang)
+    # Thêm glossary rule
+    prompt += "\n\nQUAN TRỌNG: Phải DÙNG CHÍNH XÁC các thuật ngữ trong Glossary. "
+    prompt += "Viết HOA chữ cái đầu cho tên riêng, chiêu thức, vật phẩm."
+    return prompt
 
 
 async def translate_agent_with_validation(
@@ -253,7 +255,7 @@ async def translate_agent_with_validation(
     context += f"\n[Text]\n{chunk.original_text}"
 
     messages = [
-        {"role": "system", "content": TRANSLATE_SYSTEM},
+        {"role": "system", "content": _get_translate_system(ctx)},
         {"role": "user", "content": context},
     ]
 
@@ -276,7 +278,7 @@ async def translate_agent_with_validation(
         messages = [
             {
                 "role": "system",
-                "content": TRANSLATE_SYSTEM
+                "content": _get_translate_system(ctx)
                 + "\nIMPORTANT: The previous attempt MISSED glossary terms. Include them this time.",
             },
             {"role": "user", "content": retry_prompt},

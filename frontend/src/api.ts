@@ -208,25 +208,25 @@ export const fetchVendorModels = (vendorId: string, apiKey: string) =>
 
 // Config
 export const listCategories = () => request<CategoryInfo>("/categories");
-    export const listVendors = () => request<Vendor[]>("/vendors");
+export const listVendors = () => request<Vendor[]>("/vendors");
 
-    // Reader
-    export interface ReaderChunk {
-    	id: number;
-    	chapter_idx: number;
-    	paragraph_idx: number;
-    	original_text: string;
-    	translated_text: string | null;
-    	status: string;
-    }
-    export const getReaderChunks = (
-    	bookId: number,
-    	chapterStart = 1,
-    	chapterEnd = 99999,
-    	statusFilter = "all",
-    ) =>
-    	request<{ total: number; chapters: number[]; chunks: ReaderChunk[] }>(
-    		`/books/${bookId}/reader?chapter_start=${chapterStart}&chapter_end=${chapterEnd}&status_filter=${statusFilter}`,
-    	);
+// Reader
+export interface ReaderChunk {
+	id: number;
+	chapter_idx: number;
+	paragraph_idx: number;
+	original_text: string;
+	translated_text: string | null;
+	status: string;
+}
+export const getReaderChunks = (
+	bookId: number,
+	chapterStart = 1,
+	chapterEnd = 99999,
+	statusFilter = "all",
+) =>
+	request<{ total: number; chapters: number[]; chunks: ReaderChunk[] }>(
+		`/books/${bookId}/reader?chapter_start=${chapterStart}&chapter_end=${chapterEnd}&status_filter=${statusFilter}`,
+	);
 export const promptPreview = (category: string) =>
 	request<{ category: string; prompt: string }>(`/prompt-preview/${category}`);
