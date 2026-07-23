@@ -156,33 +156,32 @@ export const startTranslate = (
 export const cancelTranslate = () =>
 	request<{ status: string }>("/translate/cancel", { method: "POST" });
 
-export const translateProgress = (
-	bookId: number,
-	onProgress: (data: ProgressData) => void,
-	onComplete: () => void,
-	onError: (err: string) => void,
-) => {
-	const evtSource = new EventSource(`${API_BASE}/translate/progress/${bookId}`);
-	evtSource.addEventListener("progress", (e) => {
-		try {
-			onProgress(JSON.parse(e.data));
-		} catch {
-			// ignore malformed progress data
-		}
-	});
-	evtSource.addEventListener("complete", () => {
-		evtSource.close();
-		onComplete();
-	});
-	evtSource.addEventListener("cancelled", () => {
-		evtSource.close();
-	});
-	evtSource.addEventListener("error", () => {
-		evtSource.close();
-		onError("Connection lost");
-	});
-	return () => evtSource.close();
-};
+    export const translateProgress = (
+    	bookId: number,
+    	onProgress: (data: ProgressData) => void,
+    	onComplete: () => void,
+    	onError: (err: string) => void,
+    ) => {
+    	// Polling thay vi SSE (tranh loi Connection lost)
+    	let cancelled = false;
+    	const poll = async () => {
+    		if (cancelled) return;
+    		try {
+    			const data = await request<ProgressData>(`/translate/status/${bookId}`);
+    			onProgress(data);
+    			if (data.status === "done" || data.status === "failed") {
+    				onComplete();
+    				return;
+    			}
+    		} catch (e) {
+    			onError("Connection lost");
+    			return;
+    		}
+    		if (!cancelled) setTimeout(poll, 1500);
+    	};
+    	setTimeout(poll, 500);
+    	return () => { cancelled = true; };
+    };
 
 // Export
 export const exportBook = (bookId: number) =>

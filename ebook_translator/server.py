@@ -716,7 +716,6 @@ async def _run_agentic_translate(
 @app.get("/api/translate/progress/{book_id}")
 async def translate_progress(book_id: int):
     """SSE endpoint — push realtime progress updates."""
-
     async def event_generator() -> AsyncGenerator:
         d = _get_db()
         while True:
@@ -730,10 +729,7 @@ async def translate_progress(book_id: int):
             )
             row = await cursor.fetchone()
             if row is None:
-                yield {
-                    "event": "error",
-                    "data": json.dumps({"error": "Book not found"}),
-                }
+                yield {"event": "error", "data": json.dumps({"error": "Book not found"})}
                 return
 
             data = {
@@ -751,6 +747,25 @@ async def translate_progress(book_id: int):
             await asyncio.sleep(1)
 
     return EventSourceResponse(event_generator())
+
+
+@app.get("/api/translate/status/{book_id}")
+async def translate_status(book_id: int) -> dict:
+    """Polling endpoint — tra ve progress duoi dang JSON."""
+    d = _get_db()
+    cursor = await d.conn.execute(
+        "SELECT total_chunks, done_chunks, failed_chunks, status FROM books WHERE id = ?",
+        (book_id,),
+    )
+    row = await cursor.fetchone()
+    if row is None:
+        return {"total": 0, "done": 0, "failed": 0, "status": "not_found"}
+    return {
+        "total": row["total_chunks"],
+        "done": row["done_chunks"],
+        "failed": row["failed_chunks"],
+        "status": row["status"],
+    }
 
 
 # ── Export ───────────────────────────────────────────────────────────────
