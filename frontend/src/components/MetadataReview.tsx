@@ -154,11 +154,10 @@ export function MetadataReview({
 						/>
 					</label>
 				</div>
-				<div className="review-actions" style={{ marginTop: 12 }}>
-				</div>
-			<p className="hint" style={{ color: "#3fb950", fontWeight: 600 }}>
-				✅ Metadata confirmed! Go to Translate tab and press Start.
-			</p>
+				<div className="review-actions" style={{ marginTop: 12 }}></div>
+				<p className="hint" style={{ color: "#3fb950", fontWeight: 600 }}>
+					✅ Metadata confirmed! Go to Translate tab and press Start.
+				</p>
 			</div>
 		);
 	}

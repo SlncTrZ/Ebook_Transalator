@@ -47,8 +47,14 @@ export function TranslateView({
 
 		try {
 			const result = await startTranslate(
-				book.file_path, vendor, apiKey, model, category,
-				chapterStart, chapterEnd, agentic,
+				book.file_path,
+				vendor,
+				apiKey,
+				model,
+				category,
+				chapterStart,
+				chapterEnd,
+				agentic,
 			);
 			if (agentic) setAgentPhase("🤖 Researching...");
 			const bookId = result.book_id;
@@ -116,24 +122,48 @@ export function TranslateView({
 				{book.author && <span> by {book.author}</span>}
 			</div>
 
-			<MetadataReview book={book} apiKey={apiKey} model={model} vendor={vendor} />
+			<MetadataReview
+				book={book}
+				apiKey={apiKey}
+				model={model}
+				vendor={vendor}
+			/>
 
 			<div className="controls">
 				<label>
 					From Chapter:
-					<input type="number" min={1} defaultValue={1} style={{ width: 70, marginLeft: 4 }}
-						onChange={(e) => setChapterStart(Math.max(1, parseInt(e.target.value) || 1))} />
+					<input
+						type="number"
+						min={1}
+						defaultValue={1}
+						style={{ width: 70, marginLeft: 4 }}
+						onChange={(e) =>
+							setChapterStart(Math.max(1, parseInt(e.target.value) || 1))
+						}
+					/>
 				</label>
 				<label>
 					To Chapter:
-					<input type="number" min={1} placeholder="999" style={{ width: 70, marginLeft: 4 }}
-						onChange={(e) => setChapterEnd(e.target.value ? parseInt(e.target.value) : 99999)} />
+					<input
+						type="number"
+						min={1}
+						placeholder="999"
+						style={{ width: 70, marginLeft: 4 }}
+						onChange={(e) =>
+							setChapterEnd(e.target.value ? parseInt(e.target.value) : 99999)
+						}
+					/>
 				</label>
 				<label>
 					Category:
-					<select value={category} onChange={(e) => setCategory(e.target.value)}>
+					<select
+						value={category}
+						onChange={(e) => setCategory(e.target.value)}
+					>
 						{Object.entries(categories).map(([key, label]) => (
-							<option key={key} value={key}>{label}</option>
+							<option key={key} value={key}>
+								{label}
+							</option>
 						))}
 					</select>
 				</label>

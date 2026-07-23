@@ -365,6 +365,17 @@ async def research_book(book_id: int, req: AnalyzeRequest) -> dict:
     preview = await get_preview_text(book.file_path)
     ctx = await research_agent(preview, ctx)
 
+    # Luu glossary suggestions vao DB ngay
+    for term in ctx.glossary_terms:
+        existing = await d.get_glossary(book_id)
+        if not any(g.source_term == term["source"] for g in existing):
+            await d.conn.execute(
+                "INSERT INTO glossary (book_id, source_term, target_term, notes) VALUES (?, ?, ?, 'research_agent')",
+                (book_id, term["source"], term["target"]),
+            )
+    await d.conn.commit()
+
+
     return {
         "title": ctx.title,
         "author": ctx.author,
@@ -561,7 +572,6 @@ async def translate_agentic(req: StartTranslateRequest) -> dict:
     """Translate Agent + Deterministic Validation."""
     from ebook_translator.agent.pipeline import (
         AgentContext,
-        translate_agent_with_validation,
     )
 
     global active_pipeline, active_book_id, _cancel_event
