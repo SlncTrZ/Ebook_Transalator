@@ -184,8 +184,18 @@ export function MetadataReview({
 			<p className="hint">
 				AI sẽ phân tích nội dung sách và đề xuất thông tin.
 				{!analyzed && <span> (AI có kiến thức nền về triệu cuốn sách)</span>}
-				{analyzed && fromKnowledge && <span style={{ color: "#3fb950" }}> ✅ AI nhận ra sách từ kiến thức nền</span>}
-				{analyzed && !fromKnowledge && <span style={{ color: "#f0883e" }}> 🔍 AI không tự nhận ra, đã tìm DuckDuckGo</span>}
+				{analyzed && fromKnowledge && (
+					<span style={{ color: "#3fb950" }}>
+						{" "}
+						✅ AI nhận ra sách từ kiến thức nền
+					</span>
+				)}
+				{analyzed && !fromKnowledge && (
+					<span style={{ color: "#f0883e" }}>
+						{" "}
+						🔍 AI không tự nhận ra, đã tìm DuckDuckGo
+					</span>
+				)}
 				{webSearched && <span> (kết quả web trong Sources)</span>}
 			</p>
 

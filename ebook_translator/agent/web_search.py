@@ -5,6 +5,7 @@ Nếu không nhận ra, fallback tìm kiếm DuckDuckGo free (không cần API k
 
 Wing: tcdserver | Topic: ebook_translator | Updated: 2026-07-22 14:00
 """
+
 from __future__ import annotations
 
 import json
@@ -21,6 +22,7 @@ MAX_PREVIEW_CHARS = 2000
 @dataclass
 class MetadataResult:
     """Kết quả từ Web Search Agent."""
+
     title: str = ""
     author: str = ""
     source_lang: str = "en"
@@ -37,14 +39,17 @@ async def search_duckduckgo(query: str, max_results: int = 3) -> list[dict]:
     """Search DuckDuckGo (free, không cần API key)."""
     try:
         from duckduckgo_search import DDGS
+
         results = []
         with DDGS() as ddgs:
             for _, r in enumerate(ddgs.text(query, max_results=max_results)):
-                results.append({
-                    "title": r.get("title", ""),
-                    "content": r.get("body", ""),
-                    "url": r.get("href", ""),
-                })
+                results.append(
+                    {
+                        "title": r.get("title", ""),
+                        "content": r.get("body", ""),
+                        "url": r.get("href", ""),
+                    }
+                )
                 if len(results) >= max_results:
                     break
         return results
@@ -142,7 +147,9 @@ async def extract_metadata(
     # Nếu AI không tự tin hoặc không biết -> search DuckDuckGo
     search_results: list[dict] | None = None
     if force_search or (not from_knowledge) or confidence < 0.5:
-        query_lines = [line.strip() for line in preview.strip().split("\n") if line.strip()][:2]
+        query_lines = [
+            line.strip() for line in preview.strip().split("\n") if line.strip()
+        ][:2]
         query = " ".join(query_lines)[:150]
         search_query = f'"{query}" book novel author'
         logger.info("Searching DuckDuckGo for: %s", search_query)
