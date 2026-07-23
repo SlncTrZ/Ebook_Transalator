@@ -2,6 +2,7 @@
 
 Wing: tcdserver | Topic: ebook_translator | Updated: 2026-07-22 14:00
 """
+
 from __future__ import annotations
 
 import logging
@@ -31,6 +32,7 @@ SYSTEM_PROMPT = (
 @dataclass
 class TranslationConfig:
     """Configuration for the translation pipeline."""
+
     api_key: str = ""
     model: str = "gpt-4o-mini"
     base_url: str = "https://api.openai.com/v1"
@@ -58,7 +60,9 @@ class TranslationPipeline:
             prompt = f"[Glossary]\n{terms}\n\n[Text]\n{chunk.original_text}"
         return prompt
 
-    def _build_messages(self, chunk: Chunk, glossary: list[GlossaryEntry]) -> list[dict]:
+    def _build_messages(
+        self, chunk: Chunk, glossary: list[GlossaryEntry]
+    ) -> list[dict]:
         system = SYSTEM_PROMPT.format(
             source_lang=self._config.source_lang,
             target_lang=self._config.target_lang,
@@ -123,7 +127,9 @@ class TranslationPipeline:
                 result = await self._call_api(messages)
 
         if result is None:
-            raise RuntimeError(f"Translation failed after {self._config.max_retries} retries")
+            raise RuntimeError(
+                f"Translation failed after {self._config.max_retries} retries"
+            )
 
         # Step 4: Save to cache
         cache_entry = CacheEntry(

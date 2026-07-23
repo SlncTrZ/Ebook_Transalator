@@ -2,6 +2,7 @@
 
 Wing: tcdserver | Topic: ebook_translator | Updated: 2026-07-22 14:00
 """
+
 from __future__ import annotations
 
 import re
@@ -77,7 +78,9 @@ class TxtParser(BaseParser):
             chapters = [paragraphs]
 
         parsed = ParsedBook()
-        parsed.title = file_path.rsplit("/", 1)[-1].rsplit("\\", 1)[-1].rsplit(".", 1)[0]
+        parsed.title = (
+            file_path.rsplit("/", 1)[-1].rsplit("\\", 1)[-1].rsplit(".", 1)[0]
+        )
         parsed.chapters = chapters
         parsed.raw_metadata = {"encoding": enc}
         return parsed

@@ -2,6 +2,7 @@
 
 Wing: tcdserver | Topic: ebook_translator | Updated: 2026-07-22 14:00
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -65,7 +66,9 @@ async def export_epub(
 
             soup = BeautifulSoup(item.get_body_content(), "lxml")
             translations = chapters_map.get(chapter_index, {})
-            for para_index, p in enumerate(soup.find_all(["p", "h1", "h2", "h3", "h4", "h5", "h6"])):
+            for para_index, p in enumerate(
+                soup.find_all(["p", "h1", "h2", "h3", "h4", "h5", "h6"])
+            ):
                 if para_index in translations:
                     translated = translations[para_index]
                     new_tag = soup.new_tag(p.name)

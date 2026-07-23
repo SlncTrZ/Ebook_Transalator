@@ -2,6 +2,7 @@
 
 Wing: tcdserver | Topic: ebook_translator | Updated: 2026-07-22 14:00
 """
+
 from __future__ import annotations
 
 import asyncio
@@ -62,7 +63,9 @@ async def _translate_flow(
         total_paragraphs = sum(len(ch) for ch in parsed.chapters)
         console.print(f"  Title: {parsed.title or 'Unknown'}")
         console.print(f"  Author: {parsed.author or 'Unknown'}")
-        console.print(f"  Chapters: {len(parsed.chapters)}, Paragraphs: {total_paragraphs}")
+        console.print(
+            f"  Chapters: {len(parsed.chapters)}, Paragraphs: {total_paragraphs}"
+        )
 
         # 2. Insert book
         book = Book(
@@ -138,7 +141,12 @@ def cli() -> None:
 
 @cli.command()
 @click.argument("file", type=click.Path(exists=True))
-@click.option("--api-key", envvar="OPENAI_API_KEY", required=True, help="OpenAI API key (or OPENAI_API_KEY env)")
+@click.option(
+    "--api-key",
+    envvar="OPENAI_API_KEY",
+    required=True,
+    help="OpenAI API key (or OPENAI_API_KEY env)",
+)
 @click.option("--model", default="gpt-4o-mini", help="Model name")
 @click.option("--source-lang", default="en", help="Source language code")
 @click.option("--target-lang", default="vi", help="Target language code")
@@ -160,7 +168,9 @@ def translate(
         format="%(message)s",
     )
     asyncio.run(
-        _translate_flow(file, api_key, model, source_lang, target_lang, category, db_path)
+        _translate_flow(
+            file, api_key, model, source_lang, target_lang, category, db_path
+        )
     )
 
 
@@ -169,6 +179,7 @@ def translate(
 @click.option("--purge", is_flag=True, help="Clear entire cache")
 def cache(db_path: str | None, purge: bool) -> None:
     """Manage translation cache."""
+
     async def _run() -> None:
         db = Database(db_path)
         await db.connect()

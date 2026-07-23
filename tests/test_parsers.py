@@ -2,6 +2,7 @@
 
 Wing: tcdserver | Topic: ebook_translator | Updated: 2026-07-22 14:00
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -35,9 +36,14 @@ class TestTxtParser:
         assert len(result.chapters) == 1  # No chapter header → single chapter
         assert len(result.chapters[0]) == 3
 
-    def test_chapter_splitting_vietnamese(self, parser: TxtParser, tmp_path: Path) -> None:
+    def test_chapter_splitting_vietnamese(
+        self, parser: TxtParser, tmp_path: Path
+    ) -> None:
         f = tmp_path / "chapters.txt"
-        f.write_text("Chương 1\n\nFirst paragraph.\n\nSecond paragraph.\n\nChương 2\n\nThird paragraph.", encoding="utf-8")
+        f.write_text(
+            "Chương 1\n\nFirst paragraph.\n\nSecond paragraph.\n\nChương 2\n\nThird paragraph.",
+            encoding="utf-8",
+        )
         result = parser.parse(str(f))
         assert len(result.chapters) == 2
         assert "First paragraph." in result.chapters[0]

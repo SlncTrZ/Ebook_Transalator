@@ -2,6 +2,7 @@
 
 Wing: tcdserver | Topic: ebook_translator | Updated: 2026-07-22 14:00
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -11,6 +12,7 @@ from dataclasses import dataclass, field
 @dataclass
 class ParsedBook:
     """Normalized output from any parser."""
+
     title: str = ""
     author: str = ""
     chapters: list[list[str]] = field(default_factory=list)

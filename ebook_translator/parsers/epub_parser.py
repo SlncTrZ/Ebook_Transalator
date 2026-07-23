@@ -2,6 +2,7 @@
 
 Wing: tcdserver | Topic: ebook_translator | Updated: 2026-07-22 14:00
 """
+
 from __future__ import annotations
 
 from bs4 import BeautifulSoup
@@ -18,7 +19,11 @@ class EpubParser(BaseParser):
         parsed = ParsedBook()
 
         # Metadata
-        parsed.title = str(book.get_metadata("DC", "title")[0][0]) if book.get_metadata("DC", "title") else ""
+        parsed.title = (
+            str(book.get_metadata("DC", "title")[0][0])
+            if book.get_metadata("DC", "title")
+            else ""
+        )
         author_list = book.get_metadata("DC", "creator")
         if author_list:
             parsed.author = str(author_list[0][0])

@@ -21,6 +21,11 @@ Pillow>=10.3
 click>=8.1
 rich>=13.7
 
+# Server (Phase 2)
+fastapi>=0.115
+uvicorn>=0.30
+sse-starlette>=2.1
+
 # Dev
 pytest>=8.0
 pytest-asyncio>=0.24

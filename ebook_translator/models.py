@@ -2,6 +2,7 @@
 
 Wing: tcdserver | Topic: ebook_translator | Updated: 2026-07-22 14:00
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -25,6 +26,7 @@ class BookCategory(str, Enum):
 @dataclass
 class Book:
     """Metadata for an ebook being translated."""
+
     id: int | None = None
     file_path: str = ""
     title: str = ""
@@ -41,6 +43,7 @@ class Book:
 @dataclass
 class Chunk:
     """A single translatable text unit (paragraph-level)."""
+
     id: int | None = None
     book_id: int = 0
     chapter_idx: int = 0
@@ -56,6 +59,7 @@ class Chunk:
 @dataclass
 class GlossaryEntry:
     """A term mapping for consistency across translations."""
+
     id: int | None = None
     book_id: int = 0
     source_term: str = ""
@@ -66,6 +70,7 @@ class GlossaryEntry:
 @dataclass
 class CacheEntry:
     """Cached translation result keyed by content hash."""
+
     id: int | None = None
     content_hash: str = ""
     source_lang: str = "en"

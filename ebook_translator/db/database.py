@@ -3,6 +3,7 @@
 Tables: books, chunks, glossary, cache.
 Wing: tcdserver | Topic: ebook_translator | Updated: 2026-07-22 14:00
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -103,7 +104,14 @@ class Database:
         cursor = await self.conn.execute(
             "INSERT INTO books (file_path, title, author, source_lang, target_lang, category) "
             "VALUES (?, ?, ?, ?, ?, ?)",
-            (book.file_path, book.title, book.author, book.source_lang, book.target_lang, book.category.value),
+            (
+                book.file_path,
+                book.title,
+                book.author,
+                book.source_lang,
+                book.target_lang,
+                book.category.value,
+            ),
         )
         await self.conn.commit()
         row_id = cursor.lastrowid
@@ -133,7 +141,17 @@ class Database:
         await self.conn.executemany(
             "INSERT INTO chunks (book_id, chapter_idx, paragraph_idx, content_hash, original_text, token_count) "
             "VALUES (?, ?, ?, ?, ?, ?)",
-            [(c.book_id, c.chapter_idx, c.paragraph_idx, c.content_hash, c.original_text, c.token_count) for c in chunks],
+            [
+                (
+                    c.book_id,
+                    c.chapter_idx,
+                    c.paragraph_idx,
+                    c.content_hash,
+                    c.original_text,
+                    c.token_count,
+                )
+                for c in chunks
+            ],
         )
         await self.conn.commit()
 
@@ -145,7 +163,9 @@ class Database:
         rows = await cursor.fetchall()
         return [Chunk(**dict(r)) for r in rows]
 
-    async def update_chunk_result(self, chunk_id: int, translated: str, status: str) -> None:
+    async def update_chunk_result(
+        self, chunk_id: int, translated: str, status: str
+    ) -> None:
         await self.conn.execute(
             "UPDATE chunks SET translated_text = ?, status = ? WHERE id = ?",
             (translated, status, chunk_id),
@@ -161,7 +181,9 @@ class Database:
 
     # ---- Cache ----
 
-    async def get_cached(self, content_hash: str, source: str, target: str, model: str) -> str | None:
+    async def get_cached(
+        self, content_hash: str, source: str, target: str, model: str
+    ) -> str | None:
         cursor = await self.conn.execute(
             "SELECT translated_text FROM cache WHERE content_hash=? AND source_lang=? AND target_lang=? AND model=?",
             (content_hash, source, target, model),
@@ -173,13 +195,21 @@ class Database:
         await self.conn.execute(
             "INSERT OR IGNORE INTO cache (content_hash, source_lang, target_lang, model, translated_text) "
             "VALUES (?, ?, ?, ?, ?)",
-            (entry.content_hash, entry.source_lang, entry.target_lang, entry.model, entry.translated_text),
+            (
+                entry.content_hash,
+                entry.source_lang,
+                entry.target_lang,
+                entry.model,
+                entry.translated_text,
+            ),
         )
         await self.conn.commit()
 
     # ---- Glossary ----
 
     async def get_glossary(self, book_id: int) -> list[GlossaryEntry]:
-        cursor = await self.conn.execute("SELECT * FROM glossary WHERE book_id = ?", (book_id,))
+        cursor = await self.conn.execute(
+            "SELECT * FROM glossary WHERE book_id = ?", (book_id,)
+        )
         rows = await cursor.fetchall()
         return [GlossaryEntry(**dict(r)) for r in rows]
