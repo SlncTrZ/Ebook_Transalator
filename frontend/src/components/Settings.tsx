@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { Vendor } from '../api';
-import { listVendors } from '../api';
+import { listVendors, testConnection } from '../api';
 
 interface SettingsProps {
   apiKey: string;
@@ -16,6 +16,8 @@ export function Settings({
   onApiKeyChange, onModelChange, onVendorChange,
 }: SettingsProps) {
   const [vendors, setVendors] = useState<Vendor[]>([]);
+  const [testStatus, setTestStatus] = useState<'idle' | 'testing' | 'ok' | 'error'>('idle');
+  const [testMsg, setTestMsg] = useState('');
 
   useEffect(() => {
     listVendors().then(setVendors).catch(console.error);
@@ -31,12 +33,36 @@ export function Settings({
   const handleVendorChange = (newVendor: string) => {
     onVendorChange(newVendor);
     const v = vendors.find((v) => v.id === newVendor);
-    if (v) {
-      onModelChange(v.default_model);
+    if (v) onModelChange(v.default_model);
+    setTestStatus('idle');
+  };
+
+  const handleTest = async () => {
+    if (!apiKey && currentVendor?.requires_api_key !== false) return;
+    setTestStatus('testing');
+    setTestMsg('');
+    try {
+      const result = await testConnection(vendor, apiKey, model);
+      if (result.status === 'ok') {
+        setTestStatus('ok');
+        setTestMsg(result.reply || 'Connected!');
+      } else {
+        setTestStatus('error');
+        setTestMsg(result.detail || 'Connection failed');
+      }
+    } catch (e) {
+      setTestStatus('error');
+      setTestMsg(String(e));
     }
   };
 
   const currentVendor = vendors.find((v) => v.id === vendor);
+
+  const statusLabels: Record<string, { color: string; text: string }> = {
+    testing: { color: '#58a6ff', text: '⏳ Testing...' },
+    ok: { color: '#3fb950', text: `✅ ${testMsg}` },
+    error: { color: '#f85149', text: `❌ ${testMsg}` },
+  };
 
   return (
     <div className="settings">
@@ -50,25 +76,41 @@ export function Settings({
           ))}
         </select>
         {currentVendor && !currentVendor.requires_api_key && (
-          <p className="hint success">✅ No API key needed (local model).</p>
+          <p className="hint" style={{ color: '#3fb950' }}>✅ No API key needed (local model).</p>
         )}
       </div>
 
       <div className="setting-group">
-        <label htmlFor="api-key">API Key{currentVendor?.docs_url ? ' ' : ''}</label>
+        <label htmlFor="api-key">
+          API Key{currentVendor?.docs_url ? ' ' : ''}
+        </label>
         {currentVendor?.docs_url && (
           <a href={currentVendor.docs_url} target="_blank" rel="noopener noreferrer" className="hint">
             get key ↗
           </a>
         )}
-        <input
-          id="api-key"
-          type="password"
-          placeholder={currentVendor?.requires_api_key ? 'sk-...' : '(not needed)'}
-          value={apiKey}
-          onChange={(e) => onApiKeyChange(e.target.value)}
-          disabled={!currentVendor?.requires_api_key}
-        />
+        <div className="api-key-row">
+          <input
+            id="api-key"
+            type="password"
+            placeholder={currentVendor?.requires_api_key ? 'sk-...' : '(not needed)'}
+            value={apiKey}
+            onChange={(e) => { onApiKeyChange(e.target.value); setTestStatus('idle'); }}
+            disabled={!currentVendor?.requires_api_key}
+          />
+          <button
+            onClick={handleTest}
+            disabled={testStatus === 'testing' || (!apiKey && currentVendor?.requires_api_key !== false)}
+            className="btn-test"
+          >
+            Test & Save
+          </button>
+        </div>
+        {testStatus !== 'idle' && (
+          <p className="hint" style={{ color: statusLabels[testStatus]?.color || '#8b949e', marginTop: 6 }}>
+            {statusLabels[testStatus]?.text}
+          </p>
+        )}
         <p className="hint">
           Stored in localStorage. Can also use <code>OPENAI_API_KEY</code> env var.
         </p>
@@ -85,11 +127,7 @@ export function Settings({
 
       <div className="setting-group">
         <label>API Base URL</label>
-        <input
-          type="text"
-          value={currentVendor?.base_url || ''}
-          disabled
-        />
+        <input type="text" value={currentVendor?.base_url || ''} disabled />
         <p className="hint">
           {currentVendor?.id === 'ollama'
             ? 'Start Ollama locally, then backend auto-connects.'
@@ -100,8 +138,8 @@ export function Settings({
       <div className="setting-group">
         <h3>Server Status</h3>
         <p className="hint">
-          Backend runs at <code>http://127.0.0.1:8080</code>.
-          Start: <code>python -m ebook_translator.server</code>
+          Backend runs at <code>http://127.0.0.1:8080</code>. Start:{' '}
+          <code>python -m ebook_translator.server</code>
         </p>
       </div>
     </div>

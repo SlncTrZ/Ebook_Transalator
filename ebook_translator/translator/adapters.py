@@ -6,6 +6,7 @@ Mỗi vendor implement 2 method:
 
 Wing: tcdserver | Topic: ebook_translator | Updated: 2026-07-22 14:00
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -15,6 +16,7 @@ from dataclasses import dataclass, field
 @dataclass
 class VendorInfo:
     """Thông tin vendor cho UI."""
+
     id: str
     name: str
     base_url: str
@@ -23,42 +25,53 @@ class VendorInfo:
     requires_api_key: bool = True
     docs_url: str = ""
 
+
 # ── Danh sách vendor hỗ trợ ──────────────────────────────────────────────
 
 VENDORS: dict[str, VendorInfo] = {
     "openai": VendorInfo(
-        id="openai", name="OpenAI",
+        id="openai",
+        name="OpenAI",
         base_url="https://api.openai.com/v1",
         default_model="gpt-4o-mini",
         models=["gpt-4o-mini", "gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo"],
         docs_url="https://platform.openai.com/api-keys",
     ),
     "deepseek": VendorInfo(
-        id="deepseek", name="DeepSeek",
+        id="deepseek",
+        name="DeepSeek",
         base_url="https://api.deepseek.com/v1",
         default_model="deepseek-chat",
         models=["deepseek-chat", "deepseek-reasoner"],
         docs_url="https://platform.deepseek.com/api_keys",
     ),
     "groq": VendorInfo(
-        id="groq", name="Groq (free, fast)",
+        id="groq",
+        name="Groq (free, fast)",
         base_url="https://api.groq.com/openai/v1",
         default_model="llama-3.3-70b-versatile",
         models=[
-            "llama-3.3-70b-versatile", "llama-3.1-8b-instant",
-            "mixtral-8x7b-32768", "gemma2-9b-it",
+            "llama-3.3-70b-versatile",
+            "llama-3.1-8b-instant",
+            "mixtral-8x7b-32768",
+            "gemma2-9b-it",
         ],
         docs_url="https://console.groq.com/keys",
     ),
     "together": VendorInfo(
-        id="together", name="Together AI",
+        id="together",
+        name="Together AI",
         base_url="https://api.together.xyz/v1",
         default_model="mistralai/Mixtral-8x22B-Instruct-v0.1",
-        models=["mistralai/Mixtral-8x22B-Instruct-v0.1", "meta-llama/Llama-3-70b-chat-hf"],
+        models=[
+            "mistralai/Mixtral-8x22B-Instruct-v0.1",
+            "meta-llama/Llama-3-70b-chat-hf",
+        ],
         docs_url="https://api.together.xyz/settings/api-keys",
     ),
     "ollama": VendorInfo(
-        id="ollama", name="Ollama (local)",
+        id="ollama",
+        name="Ollama (local)",
         base_url="http://localhost:11434/v1",
         default_model="llama3.2",
         models=["llama3.2", "llama3.1", "qwen2.5", "gemma2", "mistral"],
@@ -66,7 +79,8 @@ VENDORS: dict[str, VendorInfo] = {
         docs_url="https://ollama.com/",
     ),
     "anthropic": VendorInfo(
-        id="anthropic", name="Anthropic Claude",
+        id="anthropic",
+        name="Anthropic Claude",
         base_url="https://api.anthropic.com/v1",
         default_model="claude-3-haiku-20240307",
         models=[
@@ -78,15 +92,22 @@ VENDORS: dict[str, VendorInfo] = {
         docs_url="https://console.anthropic.com/",
     ),
     "google": VendorInfo(
-        id="google", name="Google Gemini",
+        id="google",
+        name="Google Gemini",
         base_url="https://generativelanguage.googleapis.com/v1beta",
         default_model="gemini-2.0-flash",
-        models=["gemini-2.0-flash", "gemini-2.0-pro", "gemini-1.5-flash", "gemini-1.5-pro"],
+        models=[
+            "gemini-2.0-flash",
+            "gemini-2.0-pro",
+            "gemini-1.5-flash",
+            "gemini-1.5-pro",
+        ],
         docs_url="https://aistudio.google.com/apikey",
     ),
 }
 
 # ── Base adapter ─────────────────────────────────────────────────────────
+
 
 class BaseAdapter(ABC):
     """Abstract adapter — mỗi vendor implement riêng."""
@@ -102,15 +123,14 @@ class BaseAdapter(ABC):
         ...
 
     @abstractmethod
-    def build_headers(self) -> dict[str, str]:
-        ...
+    def build_headers(self) -> dict[str, str]: ...
 
     @abstractmethod
-    def build_payload(self, messages: list[dict]) -> dict:
-        ...
+    def build_payload(self, messages: list[dict]) -> dict: ...
 
 
 # ── OpenAI-compatible adapter (Deepseek, Groq, Together, Ollama...) ──────
+
 
 class OpenAICompatibleAdapter(BaseAdapter):
     """Dùng chung cho mọi vendor OpenAI-compatible."""
@@ -130,6 +150,7 @@ class OpenAICompatibleAdapter(BaseAdapter):
 
     async def translate(self, messages: list[dict]) -> str:
         import httpx
+
         async with httpx.AsyncClient(timeout=120) as client:
             resp = await client.post(
                 f"{self.base_url}/chat/completions",
@@ -142,6 +163,7 @@ class OpenAICompatibleAdapter(BaseAdapter):
 
 
 # ── Anthropic adapter ────────────────────────────────────────────────────
+
 
 class AnthropicAdapter(BaseAdapter):
     """Adapter riêng cho Anthropic Claude API."""
@@ -174,6 +196,7 @@ class AnthropicAdapter(BaseAdapter):
 
     async def translate(self, messages: list[dict]) -> str:
         import httpx
+
         async with httpx.AsyncClient(timeout=120) as client:
             resp = await client.post(
                 f"{self.base_url}/messages",
@@ -186,6 +209,7 @@ class AnthropicAdapter(BaseAdapter):
 
 
 # ── Google Gemini adapter ────────────────────────────────────────────────
+
 
 class GeminiAdapter(BaseAdapter):
     """Adapter riêng cho Google Gemini API."""
@@ -217,6 +241,7 @@ class GeminiAdapter(BaseAdapter):
 
     async def translate(self, messages: list[dict]) -> str:
         import httpx
+
         url = f"{self.base_url}/models/{self.model}:generateContent?key={self.api_key}"
         async with httpx.AsyncClient(timeout=120) as client:
             resp = await client.post(
@@ -231,7 +256,10 @@ class GeminiAdapter(BaseAdapter):
 
 # ── Factory ──────────────────────────────────────────────────────────────
 
-def create_adapter(vendor_id: str, api_key: str, model: str, base_url: str | None = None) -> BaseAdapter:
+
+def create_adapter(
+    vendor_id: str, api_key: str, model: str, base_url: str | None = None
+) -> BaseAdapter:
     """Tạo adapter phù hợp với vendor.
 
     Args:

@@ -159,8 +159,15 @@ export const translateProgress = (
 export const exportBook = (bookId: number) =>
 	request<{ path: string }>(`/export/${bookId}`, { method: "POST" });
 
-// Config
-export const listCategories = () => request<CategoryInfo>("/categories");
+    // Connection test
+    export const testConnection = (vendor: string, apiKey: string, model: string) =>
+    	request<{ status: string; reply?: string; detail?: string }>("/test-connection", {
+    		method: "POST",
+    		body: JSON.stringify({ vendor, api_key: apiKey, model }),
+    	});
+
+    // Config
+    export const listCategories = () => request<CategoryInfo>("/categories");
 export const listVendors = () => request<Vendor[]>("/vendors");
 export const promptPreview = (category: string) =>
 	request<{ category: string; prompt: string }>(`/prompt-preview/${category}`);

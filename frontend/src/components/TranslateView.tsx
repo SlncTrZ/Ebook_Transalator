@@ -16,7 +16,12 @@ interface TranslateViewProps {
 	vendor: string;
 }
 
-export function TranslateView({ book, apiKey, model, vendor }: TranslateViewProps) {
+export function TranslateView({
+	book,
+	apiKey,
+	model,
+	vendor,
+}: TranslateViewProps) {
 	const [running, setRunning] = useState(false);
 	const [progress, setProgress] = useState<ProgressData | null>(null);
 	const [category, setCategory] = useState("general");

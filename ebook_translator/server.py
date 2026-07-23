@@ -53,6 +53,13 @@ class StartTranslateRequest(BaseModel):
     category: str = "general"
     base_url: str = ""
 
+
+class TestConnectionRequest(BaseModel):
+    vendor: str = "openai"
+    api_key: str = ""
+    model: str = ""
+    base_url: str = ""
+
 class VendorConfigRequest(BaseModel):
     vendor: str = "openai"
     api_key: str = ""
@@ -104,11 +111,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
 app = FastAPI(title="Ebook Translator API", version="0.2.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "http://localhost:1420",
-        "http://127.0.0.1:1420",
-        "tauri://localhost",
-    ],
+    allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -350,8 +353,9 @@ async def start_translate(req: StartTranslateRequest) -> dict:
 
         config = TranslationConfig(
             vendor=req.vendor,
-            api_key=req.api_key or os.environ.get("OPENAI_API_KEY", "")
-                         or os.environ.get("API_KEY", ""),
+            api_key=req.api_key
+            or os.environ.get("OPENAI_API_KEY", "")
+            or os.environ.get("API_KEY", ""),
             model=req.model,
             base_url=req.base_url,
             source_lang=req.source_lang,
@@ -487,6 +491,7 @@ async def download_export(book_id: int):
 async def list_vendors() -> list[dict]:
     """Danh sach vendor AI ho tro."""
     from ebook_translator.translator.adapters import VENDORS
+
     return [
         {
             "id": v.id,
@@ -500,7 +505,7 @@ async def list_vendors() -> list[dict]:
         for v in VENDORS.values()
     ]
 
-
+@app.post("/api/test-connection")async def test_connection(req: TestConnectionRequest) -> dict:    """Test API connection voi vendor dang chon."""    from ebook_translator.translator.adapters import create_adapter    from ebook_translator.translator.prompts import get_system_prompt        adapter = create_adapter(        vendor_id=req.vendor,        api_key=req.api_key,        model=req.model or "gpt-4o-mini",        base_url=req.base_url or "",    )        test_messages = [        {"role": "system", "content": "You are a helpful assistant."},        {"role": "user", "content": "Reply with exactly: OK"},    ]        try:        import asyncio        result = await asyncio.wait_for(adapter.translate(test_messages), timeout=15)        return {"status": "ok", "reply": result[:100]}    except Exception as e:        return {"status": "error", "detail": str(e)[:200]}        
 @app.get("/api/categories")
 async def list_categories() -> dict[str, str]:
     return {c.value: CATEGORY_INFO[c] for c in BookCategory}

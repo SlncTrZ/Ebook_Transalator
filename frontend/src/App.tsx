@@ -82,7 +82,12 @@ function App() {
 					/>
 				)}
 				{activeTab === "translate" && (
-					<TranslateView book={selectedBook} apiKey={apiKey} model={model} vendor={vendor} />
+					<TranslateView
+						book={selectedBook}
+						apiKey={apiKey}
+						model={model}
+						vendor={vendor}
+					/>
 				)}
 				{activeTab === "glossary" && (
 					<GlossaryEditor bookId={selectedBook?.id ?? null} />

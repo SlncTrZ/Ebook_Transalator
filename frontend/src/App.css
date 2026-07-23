@@ -467,3 +467,35 @@ button:disabled {
 .sources a:hover {
   text-decoration: underline;
 }
+
+/* ── Test & Save Button ─────────────────────────── */
+.api-key-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.api-key-row input {
+  flex: 1;
+}
+
+.btn-test {
+  white-space: nowrap;
+  padding: 8px 14px;
+  background: #238636;
+  border: 1px solid #2ea043;
+  color: #fff;
+  font-weight: 600;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.btn-test:hover {
+  background: #2ea043;
+}
+
+.btn-test:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
