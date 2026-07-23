@@ -28,6 +28,8 @@ export function TranslateView({
 	const [categories, setCategories] = useState<Record<string, string>>({});
 	const [exportPath, setExportPath] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
+	const [agentic, setAgentic] = useState(false);
+	const [agentPhase, setAgentPhase] = useState("");
 	const cancelRef = useRef<(() => void) | null>(null);
 
 	useEffect(() => {
@@ -50,13 +52,22 @@ export function TranslateView({
 				category,
 				1,
 				99999,
+				agentic,
 			);
+			if (agentic) setAgentPhase("🤖 Researching...");
 			const bookId = result.book_id;
 
 			cancelRef.current = translateProgress(
 				bookId,
 				(data) => {
 					setProgress(data);
+					if (agentic) {
+						if (data.done === 0 && data.total > 0)
+							setAgentPhase("🔍 Researching...");
+						else if (data.done > 0 && data.done < data.total)
+							setAgentPhase("📝 Translating...");
+						else if (data.done === data.total) setAgentPhase("✅ Complete");
+					}
 					if (data.status === "done" || data.status === "failed") {
 						setRunning(false);
 					}
@@ -138,6 +149,15 @@ export function TranslateView({
 
 			{error && <div className="error-banner">{error}</div>}
 
+			{agentPhase && (
+				<p
+					className="hint"
+					style={{ color: "#58a6ff", fontWeight: 600, marginTop: 8 }}
+				>
+					{agentPhase}
+				</p>
+			)}
+
 			{progress && (
 				<div className="progress-section">
 					<div className="progress-bar-container">
@@ -160,14 +180,25 @@ export function TranslateView({
 
 			<div className="actions">
 				{!running ? (
-					<button
-						className="btn-primary"
-						onClick={handleStart}
-						disabled={!apiKey}
-						title={!apiKey ? "Set API key in Settings" : ""}
-					>
-						▶ Start Translation
-					</button>
+					<>
+						<button
+							className="btn-primary"
+							onClick={handleStart}
+							disabled={!apiKey}
+							title={!apiKey ? "Set API key in Settings" : ""}
+						>
+							▶ {agentic ? "Agentic" : "Standard"} Translation
+						</button>
+						<button
+							onClick={() => setAgentic(!agentic)}
+							style={{
+								background: agentic ? "#1f6feb" : "#21262d",
+								borderColor: agentic ? "#58a6ff" : "#30363d",
+							}}
+						>
+							{agentic ? "🤖 Agentic" : "📄 Standard"}
+						</button>
+					</>
 				) : (
 					<button className="btn-danger" onClick={handleCancel}>
 						⏹ Cancel

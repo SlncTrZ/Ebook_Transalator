@@ -134,6 +134,7 @@ export const startTranslate = (
 	category: string,
 	chapterStart = 0,
 	chapterEnd = 99999,
+	agentic = false,
 ) =>
 	request<{ book_id: number; status: string }>("/translate/start", {
 		method: "POST",
@@ -145,6 +146,7 @@ export const startTranslate = (
 			category,
 			chapter_start: chapterStart,
 			chapter_end: chapterEnd,
+			agentic,
 		}),
 	});
 

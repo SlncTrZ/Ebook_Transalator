@@ -99,6 +99,7 @@ class StartTranslateRequest(BaseModel):
     base_url: str = ""
     chapter_start: int = 0
     chapter_end: int = 99999
+    agentic: bool = False
 
 
 class ConfirmMetadataRequest(BaseModel):
@@ -325,6 +326,40 @@ async def analyze_book(book_id: int, req: AnalyzeRequest) -> dict:
         raise HTTPException(status_code=500, detail=str(e)) from e
 
 
+@app.post("/api/books/{book_id}/research")
+async def research_book(book_id: int, req: AnalyzeRequest) -> dict:
+    """Research Agent: phân tích sách 1 lần, trả metadata + glossary. HITL tại đây."""
+    from ebook_translator.agent.pipeline import AgentContext, research_agent
+    from ebook_translator.translator.adapters import VENDORS
+
+    d = _get_db()
+    book = await d.get_book(book_id)
+    if book is None:
+        raise HTTPException(status_code=404, detail="Book not found")
+
+    api_key = req.api_key or os.environ.get("OPENAI_API_KEY", "")
+    if not api_key:
+        raise HTTPException(status_code=400, detail="API key required")
+
+    base_url = req.base_url or (VENDORS.get(req.vendor).base_url if VENDORS.get(req.vendor) else "")
+    model = req.model or (VENDORS.get(req.vendor).default_model if VENDORS.get(req.vendor) else "gpt-4o-mini")
+
+    ctx = AgentContext(book_id=book_id, api_key=api_key, model=model, base_url=base_url)
+    preview = await get_preview_text(book.file_path)
+    ctx = await research_agent(preview, ctx)
+
+    return {
+    "title": ctx.title,
+    "author": ctx.author,
+    "source_lang": ctx.source_lang,
+    "target_lang": ctx.target_lang,
+    "category": ctx.category,
+    "description": ctx.book_summary,
+    "style_notes": ctx.style_notes,
+    "glossary_suggestions": ctx.glossary_terms,
+    }
+
+
 @app.post("/api/books/{book_id}/confirm-metadata")
 async def confirm_metadata(book_id: int, req: ConfirmMetadataRequest) -> dict:
     """HITL: Lưu metadata user đã duyệt vào DB."""
@@ -410,18 +445,16 @@ async def start_translate(req: StartTranslateRequest) -> dict:
     global active_pipeline, active_book_id, _cancel_event
     d = _get_db()
 
-    # Cancel any active translation
     if active_pipeline:
         _cancel_event.set()
         await asyncio.sleep(0.5)
-
     _cancel_event.clear()
 
-    # Find or create book
     cursor = await d.conn.execute(
         "SELECT id FROM books WHERE file_path = ?", (req.file_path,)
     )
     row = await cursor.fetchone()
+
     if row:
         book_id = row["id"]
     else:
@@ -441,22 +474,25 @@ async def start_translate(req: StartTranslateRequest) -> dict:
         chunks = chunk_book(book_id, parsed.chapters)
         await d.insert_chunks(chunks)
 
+    api_key = (
+        req.api_key
+        or os.environ.get("OPENAI_API_KEY", "")
+        or os.environ.get("API_KEY", "")
+    )
+    active_book_id = book_id
+
+    if not req.agentic:
         config = TranslationConfig(
             vendor=req.vendor,
-            api_key=req.api_key
-            or os.environ.get("OPENAI_API_KEY", "")
-            or os.environ.get("API_KEY", ""),
-            model=req.model,
+            api_key=api_key,
+            model=req.model or "gpt-4o-mini",
             base_url=req.base_url,
             source_lang=req.source_lang,
             target_lang=req.target_lang,
         )
-    active_book_id = book_id
-    active_pipeline = TranslationPipeline(d, config)
-
-    # Run in background
-    asyncio.create_task(_run_translation(book_id))
-    return {"book_id": book_id, "status": "started"}
+        active_pipeline = TranslationPipeline(d, config)
+        asyncio.create_task(_run_translation(book_id))
+        return {"book_id": book_id, "status": "started"}
 
 
 async def _run_translation(book_id: int) -> None:
@@ -502,7 +538,74 @@ async def cancel_translate() -> dict:
         active_pipeline = None
     return {"status": "cancelled"}
 
+@app.post("/api/translate/agentic")
+async def translate_agentic(req: StartTranslateRequest) -> dict:
+    """Translate Agent + Deterministic Validation."""
+    from ebook_translator.agent.pipeline import AgentContext, translate_agent_with_validation
 
+    global active_pipeline, active_book_id, _cancel_event
+    d = _get_db()
+
+    if active_pipeline:
+        _cancel_event.set()
+    await asyncio.sleep(0.5)
+    _cancel_event.clear()
+
+    api_key = req.api_key or os.environ.get("OPENAI_API_KEY", "") or os.environ.get("API_KEY", "")
+    cursor = await d.conn.execute("SELECT id FROM books WHERE file_path = ?", (req.file_path,))
+    row = await cursor.fetchone()
+    if not row:
+        raise HTTPException(status_code=404, detail="Book not found, import first")
+    book_id = row["id"]
+    active_book_id = book_id
+
+    book = await d.get_book(book_id)
+    if book is None:
+        raise HTTPException(status_code=404)
+
+    ctx = AgentContext(
+    book_id=book_id, api_key=api_key, model=req.model or "gpt-4o-mini",
+    source_lang=book.source_lang, target_lang=book.target_lang,
+    category=book.category, base_url=req.base_url,
+    title=book.title, author=book.author,
+    )
+
+    asyncio.create_task(_run_agentic_translate(d, book_id, ctx, req.chapter_start, req.chapter_end))
+    return {"book_id": book_id, "status": "agentic_started"}
+
+
+async def _run_agentic_translate(
+    d: Database, book_id: int, ctx: AgentContext,
+    chapter_start: int, chapter_end: int,
+) -> None:
+    """Background task: Translate Agent + Validation."""
+    from ebook_translator.agent.pipeline import translate_agent_with_validation
+    try:
+        glossary = await d.get_glossary(book_id)
+        pending = await d.get_pending_chunks(book_id)
+        if chapter_end < 99999 or chapter_start > 0:
+            pending = [c for c in pending if chapter_start <= c.chapter_idx + 1 <= chapter_end]
+        ctx.total_chunks = len(pending)
+
+        for chunk in pending:
+            if _cancel_event.is_set():
+                break
+            try:
+                translated = await translate_agent_with_validation(chunk, glossary, ctx, d)
+                if chunk.id is not None:
+                    await d.update_chunk_result(chunk.id, translated, "done")
+                ctx.done_chunks += 1
+            except Exception as e:
+                if chunk.id is not None:
+                    await d.mark_chunk_failed(chunk.id, str(e))
+                ctx.failed_chunks += 1
+
+        await d.update_book_status(book_id)
+    except Exception as e:
+        logger.exception("Agentic translate failed: %s", e)
+    finally:
+        global active_pipeline
+        active_pipeline = None
 @app.get("/api/translate/progress/{book_id}")
 async def translate_progress(book_id: int):
     """SSE endpoint — push realtime progress updates."""
