@@ -13,7 +13,9 @@ from contextlib import asynccontextmanager
 from pathlib import Path
 from collections.abc import AsyncGenerator
 
-from fastapi import FastAPI, HTTPException, Query
+import tempfile
+
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
@@ -52,6 +54,10 @@ class StartTranslateRequest(BaseModel):
     target_lang: str = "vi"
     category: str = "general"
     base_url: str = ""
+
+
+class ImportBookRequest(BaseModel):
+    file_path: str
 
 
 class TestConnectionRequest(BaseModel):
@@ -150,22 +156,72 @@ async def list_books() -> list[dict]:
 
 
 @app.post("/api/books")
-async def create_book(file_path: str = Query(...)) -> dict:
+async def create_book(req: ImportBookRequest) -> dict:
     d = _get_db()
-    parser = _get_parser(file_path)
+    parser = _get_parser(req.file_path)
     try:
-        parsed = parser.parse(file_path)
+        parsed = parser.parse(req.file_path)
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
     book = Book(
-        file_path=file_path,
+        file_path=req.file_path,
         title=parsed.title,
         author=parsed.author,
     )
     book_id = await d.insert_book(book)
     chunks = chunk_book(book_id, parsed.chapters)
     await d.insert_chunks(chunks)
+    return {
+        "id": book_id,
+        "title": parsed.title,
+        "chunks": len(chunks),
+        "status": "pending",
+    }
+
+
+@app.post("/api/books/upload")
+async def upload_book(file: UploadFile = File(...)) -> dict:
+    """Upload file -> save tam -> parse -> import."""
+    if not file.filename:
+        raise HTTPException(status_code=400, detail="No file provided")
+
+    ext = Path(file.filename).suffix.lower()
+    if ext not in (".epub", ".txt"):
+        raise HTTPException(status_code=400, detail=f"Unsupported format: {ext}. Only .epub and .txt allowed.")
+
+    # Save to temp
+    temp_dir = Path(tempfile.gettempdir()) / "ebook_translator_uploads"
+    temp_dir.mkdir(parents=True, exist_ok=True)
+    temp_path = temp_dir / f"{int(__import__('time').time())}_{file.filename}"
+
+    content = await file.read()
+    with open(temp_path, "wb") as f:
+        f.write(content)
+
+    # Parse
+    d = _get_db()
+    parser = _get_parser(str(temp_path))
+    try:
+        parsed = parser.parse(str(temp_path))
+    except Exception as e:
+        temp_path.unlink(missing_ok=True)
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    title = parsed.title
+    # Neu title la temp filename -> dung original filename
+    if not title or "test_upload" in title or "tmp" in title:
+        title = Path(file.filename).stem
+
+    book = Book(
+        file_path=str(temp_path),
+        title=title,
+        author=parsed.author,
+    )
+    book_id = await d.insert_book(book)
+    chunks = chunk_book(book_id, parsed.chapters)
+    await d.insert_chunks(chunks)
+
     return {
         "id": book_id,
         "title": parsed.title,

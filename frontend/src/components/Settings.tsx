@@ -28,21 +28,24 @@ export function Settings({
 	const [fetchingModels, setFetchingModels] = useState(false);
 	const [serverRunning, setServerRunning] = useState(false);
 
-    useEffect(() => {
-    	listVendors()
-    		.then((v) => { setVendors(v); setServerRunning(true); })
-    		.catch(() => setServerRunning(false));
-    
-    	const interval = setInterval(async () => {
-    		try {
-    			await listVendors();
-    			setServerRunning(true);
-    		} catch {
-    			setServerRunning(false);
-    		}
-    	}, 10000);
-    	return () => clearInterval(interval);
-    }, []);
+	useEffect(() => {
+		listVendors()
+			.then((v) => {
+				setVendors(v);
+				setServerRunning(true);
+			})
+			.catch(() => setServerRunning(false));
+
+		const interval = setInterval(async () => {
+			try {
+				await listVendors();
+				setServerRunning(true);
+			} catch {
+				setServerRunning(false);
+			}
+		}, 10000);
+		return () => clearInterval(interval);
+	}, []);
 
 	useEffect(() => {
 		const v = vendors.find((v) => v.id === vendor);
@@ -209,11 +212,13 @@ export function Settings({
 
 			<div className="setting-group">
 				<h3>Server Status</h3>
-				<p style={{
-					color: serverRunning ? "#3fb950" : "#f85149",
-					fontSize: 14,
-					fontWeight: 600,
-				}}>
+				<p
+					style={{
+						color: serverRunning ? "#3fb950" : "#f85149",
+						fontSize: 14,
+						fontWeight: 600,
+					}}
+				>
 					{serverRunning ? "🟢 RUNNING" : "🔴 STOPPED"}
 				</p>
 			</div>
