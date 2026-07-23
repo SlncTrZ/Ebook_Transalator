@@ -96,20 +96,20 @@ export function TranslateView({ book, apiKey, model }: TranslateViewProps) {
 			<h2>🌐 Translate</h2>
 
 			<div className="book-info">
-    				<strong>{book.title || "Untitled"}</strong>
-    				{book.author && <span> by {book.author}</span>}
-    			</div>
+				<strong>{book.title || "Untitled"}</strong>
+				{book.author && <span> by {book.author}</span>}
+			</div>
 
-    			<MetadataReview
-    				book={book}
-    				apiKey={apiKey}
-    				model={model}
-    				onStartTranslate={(_id) => {
-    					setRunning(true);
-    				}}
-    			/>
+			<MetadataReview
+				book={book}
+				apiKey={apiKey}
+				model={model}
+				onStartTranslate={(_id) => {
+					setRunning(true);
+				}}
+			/>
 
-    			<div className="controls">
+			<div className="controls">
 				<label>
 					Category:
 					<select

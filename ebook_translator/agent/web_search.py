@@ -2,6 +2,7 @@
 
 Wing: tcdserver | Topic: ebook_translator | Updated: 2026-07-22 14:00
 """
+
 from __future__ import annotations
 
 import json
@@ -21,6 +22,7 @@ MAX_PREVIEW_CHARS = 2000  # Số ký tự đầu sách gửi cho LLM
 @dataclass
 class MetadataResult:
     """Kết quả từ Web Search Agent."""
+
     title: str = ""
     author: str = ""
     source_lang: str = "en"
@@ -36,14 +38,21 @@ async def search_tavily(query: str, api_key: str, max_results: int = 3) -> list[
     async with httpx.AsyncClient(timeout=15) as client:
         resp = await client.post(
             "https://api.tavily.com/search",
-            json={"api_key": api_key, "query": query, "max_results": max_results, "include_answer": True},
+            json={
+                "api_key": api_key,
+                "query": query,
+                "max_results": max_results,
+                "include_answer": True,
+            },
         )
         resp.raise_for_status()
         data = resp.json()
         results = data.get("results", [])
         # Gắn answer vào đầu
         if data.get("answer"):
-            results.insert(0, {"title": "AI Summary", "content": data["answer"], "url": ""})
+            results.insert(
+                0, {"title": "AI Summary", "content": data["answer"], "url": ""}
+            )
         return results
 
 

@@ -209,7 +209,9 @@ async def analyze_book(book_id: int, req: AnalyzeRequest) -> dict:
 
     try:
         preview = await get_preview_text(book.file_path)
-        result = await extract_metadata(preview=preview, api_key=api_key, model=req.model)
+        result = await extract_metadata(
+            preview=preview, api_key=api_key, model=req.model
+        )
         return {
             "title": result.title or book.title,
             "author": result.author or book.author,
@@ -219,9 +221,10 @@ async def analyze_book(book_id: int, req: AnalyzeRequest) -> dict:
             "description": result.description,
             "confidence": result.confidence,
             "sources": result.sources,
-}
+        }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
+
 
 @app.post("/api/books/{book_id}/confirm-metadata")
 async def confirm_metadata(book_id: int, req: ConfirmMetadataRequest) -> dict:
@@ -233,7 +236,13 @@ async def confirm_metadata(book_id: int, req: ConfirmMetadataRequest) -> dict:
 
     await d.conn.execute(
         "UPDATE books SET title=?, author=?, source_lang=?, category=? WHERE id=?",
-        (req.title or book.title, req.author or book.author, req.source_lang, req.category, book_id),
+        (
+            req.title or book.title,
+            req.author or book.author,
+            req.source_lang,
+            req.category,
+            book_id,
+        ),
     )
     await d.conn.commit()
     return {"ok": True}
