@@ -26,10 +26,23 @@ export function Settings({
 	const [testMsg, setTestMsg] = useState("");
 	const [liveModels, setLiveModels] = useState<string[] | null>(null);
 	const [fetchingModels, setFetchingModels] = useState(false);
+	const [serverRunning, setServerRunning] = useState(false);
 
-	useEffect(() => {
-		listVendors().then(setVendors).catch(console.error);
-	}, []);
+    useEffect(() => {
+    	listVendors()
+    		.then((v) => { setVendors(v); setServerRunning(true); })
+    		.catch(() => setServerRunning(false));
+    
+    	const interval = setInterval(async () => {
+    		try {
+    			await listVendors();
+    			setServerRunning(true);
+    		} catch {
+    			setServerRunning(false);
+    		}
+    	}, 10000);
+    	return () => clearInterval(interval);
+    }, []);
 
 	useEffect(() => {
 		const v = vendors.find((v) => v.id === vendor);
@@ -52,17 +65,19 @@ export function Settings({
 		setTestMsg("");
 		try {
 			const result = await testConnection(vendor, apiKey, model);
-    		if (result.status === "ok") {
-    			setTestStatus("ok");
-    			setTestMsg(result.reply || "Connected!");
-    			// Fetch live models sau khi test OK
-    			setFetchingModels(true);
-    			try {
-    				const models = await fetchVendorModels(vendor, apiKey);
-    				if (models.length > 0) setLiveModels(models);
-    			} catch (e) { console.error("Failed to fetch models", e); }
-    			setFetchingModels(false);
-    		} else {
+			if (result.status === "ok") {
+				setTestStatus("ok");
+				setTestMsg(result.reply || "Connected!");
+				// Fetch live models sau khi test OK
+				setFetchingModels(true);
+				try {
+					const models = await fetchVendorModels(vendor, apiKey);
+					if (models.length > 0) setLiveModels(models);
+				} catch (e) {
+					console.error("Failed to fetch models", e);
+				}
+				setFetchingModels(false);
+			} else {
 				setTestStatus("error");
 				setTestMsg(result.detail || "Connection failed");
 			}
@@ -161,7 +176,9 @@ export function Settings({
 			</div>
 
 			<div className="setting-group">
-				<label htmlFor="model">Model {fetchingModels && <span className="hint">(fetching...)</span>}</label>
+				<label htmlFor="model">
+					Model {fetchingModels && <span className="hint">(fetching...)</span>}
+				</label>
 				<select
 					id="model"
 					value={model}
@@ -174,7 +191,9 @@ export function Settings({
 					))}
 				</select>
 				{liveModels && liveModels.length > 0 && (
-					<p className="hint" style={{ color: "#3fb950" }}>✅ {liveModels.length} models loaded from API</p>
+					<p className="hint" style={{ color: "#3fb950" }}>
+						✅ {liveModels.length} models loaded from API
+					</p>
 				)}
 			</div>
 
@@ -190,9 +209,12 @@ export function Settings({
 
 			<div className="setting-group">
 				<h3>Server Status</h3>
-				<p className="hint">
-					Backend runs at <code>http://127.0.0.1:8080</code>. Start:{" "}
-					<code>python -m ebook_translator.server</code>
+				<p style={{
+					color: serverRunning ? "#3fb950" : "#f85149",
+					fontSize: 14,
+					fontWeight: 600,
+				}}>
+					{serverRunning ? "🟢 RUNNING" : "🔴 STOPPED"}
 				</p>
 			</div>
 		</div>

@@ -6,6 +6,7 @@ Mỗi vendor implement 2 method:
 
 Wing: tcdserver | Topic: ebook_translator | Updated: 2026-07-22 14:00
 """
+
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
@@ -15,6 +16,7 @@ from dataclasses import dataclass, field
 @dataclass
 class VendorInfo:
     """Thông tin vendor cho UI."""
+
     id: str
     name: str
     base_url: str
@@ -23,48 +25,56 @@ class VendorInfo:
     requires_api_key: bool = True
     docs_url: str = ""
 
+
 # ── Danh sách vendor hỗ trợ (models mặc định, sẽ được fetch lại sau) ─────────
 
 VENDORS: dict[str, VendorInfo] = {
     "openai": VendorInfo(
-        id="openai", name="OpenAI",
+        id="openai",
+        name="OpenAI",
         base_url="https://api.openai.com/v1",
         default_model="gpt-4o-mini",
         docs_url="https://platform.openai.com/api-keys",
     ),
     "deepseek": VendorInfo(
-        id="deepseek", name="DeepSeek",
+        id="deepseek",
+        name="DeepSeek",
         base_url="https://api.deepseek.com/v1",
         default_model="deepseek-chat",
         docs_url="https://platform.deepseek.com/api_keys",
     ),
     "groq": VendorInfo(
-        id="groq", name="Groq (free, fast)",
+        id="groq",
+        name="Groq (free, fast)",
         base_url="https://api.groq.com/openai/v1",
         default_model="llama-3.3-70b-versatile",
         docs_url="https://console.groq.com/keys",
     ),
     "together": VendorInfo(
-        id="together", name="Together AI",
+        id="together",
+        name="Together AI",
         base_url="https://api.together.xyz/v1",
         default_model="mistralai/Mixtral-8x22B-Instruct-v0.1",
         docs_url="https://api.together.xyz/settings/api-keys",
     ),
     "ollama": VendorInfo(
-        id="ollama", name="Ollama (local)",
+        id="ollama",
+        name="Ollama (local)",
         base_url="http://localhost:11434",
         default_model="llama3.2",
         requires_api_key=False,
         docs_url="https://ollama.com/",
     ),
     "anthropic": VendorInfo(
-        id="anthropic", name="Anthropic Claude",
+        id="anthropic",
+        name="Anthropic Claude",
         base_url="https://api.anthropic.com/v1",
         default_model="claude-3-haiku-20240307",
         docs_url="https://console.anthropic.com/",
     ),
     "google": VendorInfo(
-        id="google", name="Google Gemini",
+        id="google",
+        name="Google Gemini",
         base_url="https://generativelanguage.googleapis.com/v1beta",
         default_model="gemini-2.0-flash",
         docs_url="https://aistudio.google.com/apikey",
@@ -73,6 +83,7 @@ VENDORS: dict[str, VendorInfo] = {
 
 
 # ── Base adapter ─────────────────────────────────────────────────────────
+
 
 class BaseAdapter(ABC):
     """Abstract adapter — mỗi vendor implement riêng."""
@@ -83,8 +94,7 @@ class BaseAdapter(ABC):
         self.base_url = base_url
 
     @abstractmethod
-    async def translate(self, messages: list[dict]) -> str:
-        ...
+    async def translate(self, messages: list[dict]) -> str: ...
 
     @abstractmethod
     async def fetch_models(self) -> list[str]:
@@ -94,11 +104,13 @@ class BaseAdapter(ABC):
 
 # ── OpenAI-compatible adapter (Deepseek, Groq, Together...) ────────────
 
+
 class OpenAICompatibleAdapter(BaseAdapter):
     """Dùng chung cho mọi vendor OpenAI-compatible."""
 
     async def translate(self, messages: list[dict]) -> str:
         import httpx
+
         async with httpx.AsyncClient(timeout=120) as client:
             resp = await client.post(
                 f"{self.base_url}/chat/completions",
@@ -116,6 +128,7 @@ class OpenAICompatibleAdapter(BaseAdapter):
     async def fetch_models(self) -> list[str]:
         """GET /v1/models -> list model IDs."""
         import httpx
+
         try:
             async with httpx.AsyncClient(timeout=10) as client:
                 resp = await client.get(
@@ -126,10 +139,23 @@ class OpenAICompatibleAdapter(BaseAdapter):
                     data = resp.json()
                     models = [m["id"] for m in data.get("data", [])]
                     # Loc chat models (bo qua embedding)
-                    chat_keywords = ["gpt", "chat", "instruct", "turbo", "deepseek",
-                                     "llama", "mixtral", "qwen", "gemma", "mistral",
-                                     "claude", "command"]
-                    filtered = [m for m in models if any(k in m.lower() for k in chat_keywords)]
+                    chat_keywords = [
+                        "gpt",
+                        "chat",
+                        "instruct",
+                        "turbo",
+                        "deepseek",
+                        "llama",
+                        "mixtral",
+                        "qwen",
+                        "gemma",
+                        "mistral",
+                        "claude",
+                        "command",
+                    ]
+                    filtered = [
+                        m for m in models if any(k in m.lower() for k in chat_keywords)
+                    ]
                     return filtered or models[:30]
         except Exception:
             pass
@@ -144,11 +170,13 @@ class OpenAICompatibleAdapter(BaseAdapter):
 
 # ── Ollama adapter (API format khac: /api/tags) ──────────────────────────
 
+
 class OllamaAdapter(BaseAdapter):
     """Adapter rieng cho Ollama (API local, format khac)."""
 
     async def translate(self, messages: list[dict]) -> str:
         import httpx
+
         # Chuyen doi messages -> Ollama prompt format
         prompt = ""
         for msg in messages:
@@ -177,6 +205,7 @@ class OllamaAdapter(BaseAdapter):
 
     async def fetch_models(self) -> list[str]:
         import httpx
+
         try:
             async with httpx.AsyncClient(timeout=5) as client:
                 resp = await client.get(f"{self.base_url}/api/tags")
@@ -189,6 +218,7 @@ class OllamaAdapter(BaseAdapter):
 
 
 # ── Anthropic adapter ────────────────────────────────────────────────────
+
 
 class AnthropicAdapter(BaseAdapter):
     """Adapter rieng cho Anthropic Claude API."""
@@ -204,6 +234,7 @@ class AnthropicAdapter(BaseAdapter):
 
     async def translate(self, messages: list[dict]) -> str:
         import httpx
+
         system = ""
         chat_messages = []
         for msg in messages:
@@ -236,11 +267,13 @@ class AnthropicAdapter(BaseAdapter):
 
 # ── Google Gemini adapter ────────────────────────────────────────────────
 
+
 class GeminiAdapter(BaseAdapter):
     """Adapter rieng cho Google Gemini API."""
 
     async def translate(self, messages: list[dict]) -> str:
         import httpx
+
         system = ""
         contents = []
         for msg in messages:
@@ -250,7 +283,10 @@ class GeminiAdapter(BaseAdapter):
                 role = "user" if msg["role"] == "user" else "model"
                 contents.append({"role": role, "parts": [{"text": msg["content"]}]})
 
-        payload = {"contents": contents, "generationConfig": {"temperature": 0.3, "maxOutputTokens": 4096}}
+        payload = {
+            "contents": contents,
+            "generationConfig": {"temperature": 0.3, "maxOutputTokens": 4096},
+        }
         if system:
             payload["system_instruction"] = {"parts": [{"text": system}]}
 
@@ -263,22 +299,34 @@ class GeminiAdapter(BaseAdapter):
 
     async def fetch_models(self) -> list[str]:
         import httpx
+
         try:
             url = f"{self.base_url}/models?key={self.api_key}"
             async with httpx.AsyncClient(timeout=10) as client:
                 resp = await client.get(url)
                 if resp.status_code == 200:
-                    models = [m["name"].replace("models/", "") for m in resp.json().get("models", [])]
+                    models = [
+                        m["name"].replace("models/", "")
+                        for m in resp.json().get("models", [])
+                    ]
                     chat_models = [m for m in models if "gemini" in m.lower()]
                     return chat_models[:20]
         except Exception:
             pass
-        return ["gemini-2.0-flash", "gemini-2.0-pro", "gemini-1.5-flash", "gemini-1.5-pro"]
+        return [
+            "gemini-2.0-flash",
+            "gemini-2.0-pro",
+            "gemini-1.5-flash",
+            "gemini-1.5-pro",
+        ]
 
 
 # ── Factory ──────────────────────────────────────────────────────────────
 
-def create_adapter(vendor_id: str, api_key: str, model: str, base_url: str | None = None) -> BaseAdapter:
+
+def create_adapter(
+    vendor_id: str, api_key: str, model: str, base_url: str | None = None
+) -> BaseAdapter:
     """Tao adapter phu hop voi vendor."""
     vendor = VENDORS.get(vendor_id)
     url = base_url or (vendor.base_url if vendor else "")
@@ -293,7 +341,9 @@ def create_adapter(vendor_id: str, api_key: str, model: str, base_url: str | Non
         return OpenAICompatibleAdapter(api_key, model, url)
 
 
-async def fetch_vendor_models(vendor_id: str, api_key: str, base_url: str | None = None) -> list[str]:
+async def fetch_vendor_models(
+    vendor_id: str, api_key: str, base_url: str | None = None
+) -> list[str]:
     """Fetch danh sach model that tu vendor API.
 
     Args:

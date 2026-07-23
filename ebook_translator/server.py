@@ -512,6 +512,7 @@ async def list_vendors() -> list[dict]:
 async def get_vendor_models(vendor_id: str, req: TestConnectionRequest) -> list[str]:
     """Fetch danh sach model that tu vendor API."""
     from ebook_translator.translator.adapters import fetch_vendor_models
+
     try:
         models = await fetch_vendor_models(
             vendor_id=vendor_id,

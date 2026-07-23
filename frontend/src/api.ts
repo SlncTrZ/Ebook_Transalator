@@ -169,15 +169,15 @@ export const testConnection = (vendor: string, apiKey: string, model: string) =>
 		},
 	);
 
-    // Fetch models from vendor API
-    export const fetchVendorModels = (vendorId: string, apiKey: string) =>
-    	request<string[]>("/vendors/" + vendorId + "/models", {
-    		method: "POST",
-    		body: JSON.stringify({ vendor: vendorId, api_key: apiKey }),
-    	});
+// Fetch models from vendor API
+export const fetchVendorModels = (vendorId: string, apiKey: string) =>
+	request<string[]>("/vendors/" + vendorId + "/models", {
+		method: "POST",
+		body: JSON.stringify({ vendor: vendorId, api_key: apiKey }),
+	});
 
-    // Config
-    export const listCategories = () => request<CategoryInfo>("/categories");
-    export const listVendors = () => request<Vendor[]>("/vendors");
+// Config
+export const listCategories = () => request<CategoryInfo>("/categories");
+export const listVendors = () => request<Vendor[]>("/vendors");
 export const promptPreview = (category: string) =>
 	request<{ category: string; prompt: string }>(`/prompt-preview/${category}`);
