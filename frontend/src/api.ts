@@ -96,8 +96,19 @@ export const deleteGlossary = (id: number) =>
 	request<{ ok: boolean }>(`/glossary/${id}`, { method: "DELETE" });
 
 // Translation
+export interface Vendor {
+	id: string;
+	name: string;
+	base_url: string;
+	default_model: string;
+	models: string[];
+	requires_api_key: boolean;
+	docs_url: string;
+}
+
 export const startTranslate = (
 	filePath: string,
+	vendor: string,
 	apiKey: string,
 	model: string,
 	category: string,
@@ -106,6 +117,7 @@ export const startTranslate = (
 		method: "POST",
 		body: JSON.stringify({
 			file_path: filePath,
+			vendor,
 			api_key: apiKey,
 			model,
 			category,
@@ -149,5 +161,6 @@ export const exportBook = (bookId: number) =>
 
 // Config
 export const listCategories = () => request<CategoryInfo>("/categories");
+export const listVendors = () => request<Vendor[]>("/vendors");
 export const promptPreview = (category: string) =>
 	request<{ category: string; prompt: string }>(`/prompt-preview/${category}`);

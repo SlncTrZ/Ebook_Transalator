@@ -13,9 +13,10 @@ interface TranslateViewProps {
 	book: Book | null;
 	apiKey: string;
 	model: string;
+	vendor: string;
 }
 
-export function TranslateView({ book, apiKey, model }: TranslateViewProps) {
+export function TranslateView({ book, apiKey, model, vendor }: TranslateViewProps) {
 	const [running, setRunning] = useState(false);
 	const [progress, setProgress] = useState<ProgressData | null>(null);
 	const [category, setCategory] = useState("general");
@@ -38,6 +39,7 @@ export function TranslateView({ book, apiKey, model }: TranslateViewProps) {
 		try {
 			const result = await startTranslate(
 				book.file_path,
+				vendor,
 				apiKey,
 				model,
 				category,

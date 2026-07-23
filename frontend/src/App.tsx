@@ -17,6 +17,9 @@ function App() {
 	const [model, setModel] = useState(
 		() => localStorage.getItem("et_model") || "gpt-4o-mini",
 	);
+	const [vendor, setVendor] = useState(
+		() => localStorage.getItem("et_vendor") || "openai",
+	);
 
 	const handleSelectBook = (book: Book) => {
 		setSelectedBook(book);
@@ -31,6 +34,11 @@ function App() {
 	const handleModelChange = (m: string) => {
 		setModel(m);
 		localStorage.setItem("et_model", m);
+	};
+
+	const handleVendorChange = (v: string) => {
+		setVendor(v);
+		localStorage.setItem("et_vendor", v);
 	};
 
 	return (
@@ -74,7 +82,7 @@ function App() {
 					/>
 				)}
 				{activeTab === "translate" && (
-					<TranslateView book={selectedBook} apiKey={apiKey} model={model} />
+					<TranslateView book={selectedBook} apiKey={apiKey} model={model} vendor={vendor} />
 				)}
 				{activeTab === "glossary" && (
 					<GlossaryEditor bookId={selectedBook?.id ?? null} />
@@ -83,8 +91,10 @@ function App() {
 					<Settings
 						apiKey={apiKey}
 						model={model}
+						vendor={vendor}
 						onApiKeyChange={handleApiKeyChange}
 						onModelChange={handleModelChange}
+						onVendorChange={handleVendorChange}
 					/>
 				)}
 			</main>

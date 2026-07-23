@@ -1,74 +1,109 @@
+import { useState, useEffect } from 'react';
+import type { Vendor } from '../api';
+import { listVendors } from '../api';
+
 interface SettingsProps {
-	apiKey: string;
-	model: string;
-	onApiKeyChange: (key: string) => void;
-	onModelChange: (model: string) => void;
+  apiKey: string;
+  model: string;
+  vendor: string;
+  onApiKeyChange: (key: string) => void;
+  onModelChange: (model: string) => void;
+  onVendorChange: (vendor: string) => void;
 }
 
-const MODELS = [
-	{ value: "gpt-4o-mini", label: "GPT-4o Mini (fast, cheap)" },
-	{ value: "gpt-4o", label: "GPT-4o (quality)" },
-	{ value: "gpt-4-turbo", label: "GPT-4 Turbo" },
-	{ value: "claude-3-haiku-20240307", label: "Claude 3 Haiku" },
-	{ value: "claude-3-sonnet-20240229", label: "Claude 3 Sonnet" },
-];
-
 export function Settings({
-	apiKey,
-	model,
-	onApiKeyChange,
-	onModelChange,
+  apiKey, model, vendor,
+  onApiKeyChange, onModelChange, onVendorChange,
 }: SettingsProps) {
-	return (
-		<div className="settings">
-			<h2>⚙️ Settings</h2>
+  const [vendors, setVendors] = useState<Vendor[]>([]);
 
-			<div className="setting-group">
-				<label htmlFor="api-key">API Key</label>
-				<input
-					id="api-key"
-					type="password"
-					placeholder="sk-..."
-					value={apiKey}
-					onChange={(e) => onApiKeyChange(e.target.value)}
-				/>
-				<p className="hint">
-					Stored in localStorage. Never shared. Can also be set via{" "}
-					<code>OPENAI_API_KEY</code> env var.
-				</p>
-			</div>
+  useEffect(() => {
+    listVendors().then(setVendors).catch(console.error);
+  }, []);
 
-			<div className="setting-group">
-				<label htmlFor="model">Model</label>
-				<select
-					id="model"
-					value={model}
-					onChange={(e) => onModelChange(e.target.value)}
-				>
-					{MODELS.map((m) => (
-						<option key={m.value} value={m.value}>
-							{m.label}
-						</option>
-					))}
-				</select>
-			</div>
+  useEffect(() => {
+    const v = vendors.find((v) => v.id === vendor);
+    if (v && v.default_model && !model) {
+      onModelChange(v.default_model);
+    }
+  }, [vendor, vendors]);
 
-			<div className="setting-group">
-				<label>API Base URL</label>
-				<input type="text" defaultValue="https://api.openai.com/v1" disabled />
-				<p className="hint">
-					Custom base URL for OpenAI-compatible APIs (e.g., Ollama, vLLM).
-					Coming soon.
-				</p>
-			</div>
+  const handleVendorChange = (newVendor: string) => {
+    onVendorChange(newVendor);
+    const v = vendors.find((v) => v.id === newVendor);
+    if (v) {
+      onModelChange(v.default_model);
+    }
+  };
 
-			<div className="setting-group">
-				<h3>Server Status</h3>
-				<p className="hint">
-					Backend runs at <code>http://127.0.0.1:8080</code>. Start it with:{" "}
-					<code>python -m ebook_translator.server</code>
-				</p>
-			</div>
-		</div>
-	);
+  const currentVendor = vendors.find((v) => v.id === vendor);
+
+  return (
+    <div className="settings">
+      <h2>⚙️ Settings</h2>
+
+      <div className="setting-group">
+        <label htmlFor="vendor">AI Provider</label>
+        <select id="vendor" value={vendor} onChange={(e) => handleVendorChange(e.target.value)}>
+          {vendors.map((v) => (
+            <option key={v.id} value={v.id}>{v.name}</option>
+          ))}
+        </select>
+        {currentVendor && !currentVendor.requires_api_key && (
+          <p className="hint success">✅ No API key needed (local model).</p>
+        )}
+      </div>
+
+      <div className="setting-group">
+        <label htmlFor="api-key">API Key{currentVendor?.docs_url ? ' ' : ''}</label>
+        {currentVendor?.docs_url && (
+          <a href={currentVendor.docs_url} target="_blank" rel="noopener noreferrer" className="hint">
+            get key ↗
+          </a>
+        )}
+        <input
+          id="api-key"
+          type="password"
+          placeholder={currentVendor?.requires_api_key ? 'sk-...' : '(not needed)'}
+          value={apiKey}
+          onChange={(e) => onApiKeyChange(e.target.value)}
+          disabled={!currentVendor?.requires_api_key}
+        />
+        <p className="hint">
+          Stored in localStorage. Can also use <code>OPENAI_API_KEY</code> env var.
+        </p>
+      </div>
+
+      <div className="setting-group">
+        <label htmlFor="model">Model</label>
+        <select id="model" value={model} onChange={(e) => onModelChange(e.target.value)}>
+          {currentVendor?.models.map((m) => (
+            <option key={m} value={m}>{m}</option>
+          ))}
+        </select>
+      </div>
+
+      <div className="setting-group">
+        <label>API Base URL</label>
+        <input
+          type="text"
+          value={currentVendor?.base_url || ''}
+          disabled
+        />
+        <p className="hint">
+          {currentVendor?.id === 'ollama'
+            ? 'Start Ollama locally, then backend auto-connects.'
+            : `Using ${currentVendor?.name || 'selected'} API endpoint.`}
+        </p>
+      </div>
+
+      <div className="setting-group">
+        <h3>Server Status</h3>
+        <p className="hint">
+          Backend runs at <code>http://127.0.0.1:8080</code>.
+          Start: <code>python -m ebook_translator.server</code>
+        </p>
+      </div>
+    </div>
+  );
 }

@@ -45,12 +45,19 @@ _cancel_event = asyncio.Event()
 
 class StartTranslateRequest(BaseModel):
     file_path: str
+    vendor: str = "openai"
     api_key: str = ""
-    model: str = "gpt-4o-mini"
+    model: str = ""
     source_lang: str = "en"
     target_lang: str = "vi"
     category: str = "general"
-    base_url: str = "https://api.openai.com/v1"
+    base_url: str = ""
+
+class VendorConfigRequest(BaseModel):
+    vendor: str = "openai"
+    api_key: str = ""
+    model: str = ""
+    base_url: str = ""
 
 
 class CreateGlossaryRequest(BaseModel):
@@ -341,13 +348,15 @@ async def start_translate(req: StartTranslateRequest) -> dict:
         chunks = chunk_book(book_id, parsed.chapters)
         await d.insert_chunks(chunks)
 
-    config = TranslationConfig(
-        api_key=req.api_key or os.environ.get("OPENAI_API_KEY", ""),
-        model=req.model,
-        base_url=req.base_url,
-        source_lang=req.source_lang,
-        target_lang=req.target_lang,
-    )
+        config = TranslationConfig(
+            vendor=req.vendor,
+            api_key=req.api_key or os.environ.get("OPENAI_API_KEY", "")
+                         or os.environ.get("API_KEY", ""),
+            model=req.model,
+            base_url=req.base_url,
+            source_lang=req.source_lang,
+            target_lang=req.target_lang,
+        )
     active_book_id = book_id
     active_pipeline = TranslationPipeline(d, config)
 
@@ -472,6 +481,24 @@ async def download_export(book_id: int):
 
 
 # ── Info / Config ────────────────────────────────────────────────────────
+
+
+@app.get("/api/vendors")
+async def list_vendors() -> list[dict]:
+    """Danh sach vendor AI ho tro."""
+    from ebook_translator.translator.adapters import VENDORS
+    return [
+        {
+            "id": v.id,
+            "name": v.name,
+            "base_url": v.base_url,
+            "default_model": v.default_model,
+            "models": v.models,
+            "requires_api_key": v.requires_api_key,
+            "docs_url": v.docs_url,
+        }
+        for v in VENDORS.values()
+    ]
 
 
 @app.get("/api/categories")
