@@ -181,6 +181,8 @@ async def create_book(req: ImportBookRequest) -> dict:
     book_id = await d.insert_book(book)
     chunks = chunk_book(book_id, parsed.chapters)
     await d.insert_chunks(chunks)
+    await d.conn.execute("UPDATE books SET total_chunks = ? WHERE id = ?", (len(chunks), book_id))
+    await d.conn.commit()
     return {
         "id": book_id,
         "title": parsed.title,
@@ -233,6 +235,8 @@ async def upload_book(file: UploadFile = File(...)) -> dict:
     book_id = await d.insert_book(book)
     chunks = chunk_book(book_id, parsed.chapters)
     await d.insert_chunks(chunks)
+    await d.conn.execute("UPDATE books SET total_chunks = ? WHERE id = ?", (len(chunks), book_id))
+    await d.conn.commit()
 
     return {
         "id": book_id,
@@ -500,6 +504,8 @@ async def start_translate(req: StartTranslateRequest) -> dict:
         book_id = await d.insert_book(book)
         chunks = chunk_book(book_id, parsed.chapters)
         await d.insert_chunks(chunks)
+        await d.conn.execute("UPDATE books SET total_chunks = ? WHERE id = ?", (len(chunks), book_id))
+        await d.conn.commit()
 
     api_key = (
         req.api_key
