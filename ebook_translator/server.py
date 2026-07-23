@@ -375,7 +375,6 @@ async def research_book(book_id: int, req: AnalyzeRequest) -> dict:
             )
     await d.conn.commit()
 
-
     return {
         "title": ctx.title,
         "author": ctx.author,
