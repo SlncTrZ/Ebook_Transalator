@@ -536,11 +536,11 @@ async def start_translate(req: StartTranslateRequest) -> dict:
             target_lang=req.target_lang,
         )
         active_pipeline = TranslationPipeline(d, config)
-        asyncio.create_task(_run_translation(book_id))
+        asyncio.create_task(_run_translation(book_id, req.chapter_start, req.chapter_end))
         return {"book_id": book_id, "status": "started"}
 
 
-async def _run_translation(book_id: int) -> None:
+async def _run_translation(book_id: int, chapter_start: int = 0, chapter_end: int = 99999) -> None:
     global active_pipeline, active_book_id
     d = _get_db()
     pipeline = active_pipeline
@@ -550,7 +550,12 @@ async def _run_translation(book_id: int) -> None:
     try:
         glossary = await d.get_glossary(book_id)
         pending = await d.get_pending_chunks(book_id)
+        if chapter_end < 99999 or chapter_start > 0:
+            pending = [c for c in pending if chapter_start <= c.chapter_idx + 1 <= chapter_end]
         total = len(pending)
+        if total > 0:
+            await d.conn.execute("UPDATE books SET total_chunks = ? WHERE id = ?", (total, book_id))
+            await d.conn.commit()
 
         for _, chunk in enumerate(pending):
             if _cancel_event.is_set():
