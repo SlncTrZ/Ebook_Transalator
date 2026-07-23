@@ -2,6 +2,7 @@
 
 Wing: tcdserver | Topic: ebook_translator | Updated: 2026-07-22 14:00
 """
+
 from __future__ import annotations
 
 import re
@@ -12,8 +13,15 @@ from .base import BaseParser, ParsedBook
 
 # Fallback chain: uu tien encoding Chau A (chardet hay nham KOI8-U <-> GBK)
 _ENCODING_PRIORITY = [
-    "utf-8", "gb18030", "gbk", "gb2312", "big5",
-    "shift_jis", "euc-jp", "euc-kr", "utf-16",
+    "utf-8",
+    "gb18030",
+    "gbk",
+    "gb2312",
+    "big5",
+    "shift_jis",
+    "euc-jp",
+    "euc-kr",
+    "utf-16",
 ]
 
 _CHAPTER_PATTERNS = re.compile(
@@ -85,16 +93,9 @@ class TxtParser(BaseParser):
         lines = [line.strip() for line in text.splitlines()]
 
         paragraphs: list[str] = []
-        current: list[str] = []
         for line in lines:
-            if not line:
-                if current:
-                    paragraphs.append(" ".join(current))
-                    current = []
-            else:
-                current.append(line)
-        if current:
-            paragraphs.append(" ".join(current))
+            if line:
+                paragraphs.append(line)
 
         chapters: list[list[str]] = []
         current_chapter: list[str] = []
@@ -113,7 +114,9 @@ class TxtParser(BaseParser):
             chapters = [paragraphs]
 
         parsed = ParsedBook()
-        parsed.title = file_path.rsplit("/", 1)[-1].rsplit("\\", 1)[-1].rsplit(".", 1)[0]
+        parsed.title = (
+            file_path.rsplit("/", 1)[-1].rsplit("\\", 1)[-1].rsplit(".", 1)[0]
+        )
         parsed.chapters = chapters
         parsed.raw_metadata = {"encoding": enc}
         return parsed
