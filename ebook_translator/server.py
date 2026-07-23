@@ -22,7 +22,6 @@ from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
 from ebook_translator.db.database import Database
-from ebook_translator.export.epub_writer import export_epub
 from ebook_translator.models import Book, BookCategory
 from ebook_translator.parsers.epub_parser import EpubParser
 from ebook_translator.parsers.txt_parser import TxtParser
@@ -109,6 +108,14 @@ class ConfirmMetadataRequest(BaseModel):
     source_lang: str = "en"
     target_lang: str = "vi"
     category: str = "general"
+
+
+class ExportBookRequest(BaseModel):
+    output_path: str = ""
+    mode: str = "translated"
+    format: str = "txt"
+    chapter_start: int = 1
+    chapter_end: int = 99999
 
 
 # ── Lifespan ─────────────────────────────────────────────────────────────
@@ -833,14 +840,24 @@ async def translate_status(book_id: int) -> dict:
 
 
 @app.post("/api/export/{book_id}")
-async def export_book(book_id: int) -> dict:
+async def export_book(book_id: int, req: ExportBookRequest) -> dict:
+    """Export với nhiều chế độ: mode (translated|bilingual), format (txt|epub), chapter range."""
+    from ebook_translator.export.export_engine import export_book as do_export
+
     d = _get_db()
     book = await d.get_book(book_id)
     if book is None:
         raise HTTPException(status_code=404, detail="Book not found")
 
-    output = await export_epub(d, book_id, book.file_path)
-    return {"path": output}
+    safe_title = "".join(c if c.isalnum() or c in " -_" else "_" for c in (book.title or "untitled"))
+    safe_author = "".join(c if c.isalnum() or c in " -_" else "_" for c in (book.author or "unknown"))
+    output_path = req.output_path or f"{safe_title} - {safe_author}.{req.format}"
+
+    try:
+        result = await do_export(d, book_id, output_path, req.mode, req.format, req.chapter_start, req.chapter_end)
+        return {"path": result, "mode": req.mode, "format": req.format}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
 
 @app.get("/api/export/{book_id}/download")
