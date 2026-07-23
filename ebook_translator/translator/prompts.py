@@ -4,6 +4,7 @@ Mỗi thể loại có style guide riêng + ví dụ few-shot.
 
 Wing: tcdserver | Topic: ebook_translator | Updated: 2026-07-22 14:00
 """
+
 from __future__ import annotations
 
 from ebook_translator.models import BookCategory
@@ -28,7 +29,6 @@ Gốc: 他尝试着移动了一下身体
 Đúng: Hắn cố thử cử động thân thể
 
 Dịch từ {source_lang} sang {target_lang}. Chỉ trả về bản dịch.""",
-
     BookCategory.WUXIA: """Bạn là dịch giả VÕ HIỆP, kiếm hiệp.
 
 NGUYÊN TẮC:
@@ -39,7 +39,6 @@ NGUYÊN TẮC:
 5. Chiêu thức dịch sát, giữ tên chiêu (VD: Độc Cô Cửu Kiếm, Hàng Long Thập Bát Chưởng).
 
 Dịch từ {source_lang} sang {target_lang}. Chỉ trả về bản dịch.""",
-
     BookCategory.SCI_FI: """Bạn là dịch giả KHOA HỌC VIỄN TƯỞNG.
 
 NGUYÊN TẮC:
@@ -49,7 +48,6 @@ NGUYÊN TẮC:
 4. Mô tả công nghệ: chính xác, không lãng mạn hóa.
 
 Dịch từ {source_lang} sang {target_lang}. Chỉ trả về bản dịch.""",
-
     BookCategory.FANTASY: """Bạn là dịch giả KỲ ẢO (Fantasy), MA PHÁP.
 
 NGUYÊN TẮC:
@@ -59,7 +57,6 @@ NGUYÊN TẮC:
 4. Giữ chất sử thi, tráng lệ.
 
 Dịch từ {source_lang} sang {target_lang}. Chỉ trả về bản dịch.""",
-
     BookCategory.HORROR: """Bạn là dịch giả KINH DỊ, RÙNG RỢN.
 
 NGUYÊN TẮC:
@@ -69,7 +66,6 @@ NGUYÊN TẮC:
 4. Duy trì cảm giác sợ hãi, không phá vỡ bầu không khí.
 
 Dịch từ {source_lang} sang {target_lang}. Chỉ trả về bản dịch.""",
-
     BookCategory.ROMANCE: """Bạn là dịch giả NGÔN TÌNH, LÃNG MẠN.
 
 NGUYÊN TẮC:
@@ -79,7 +75,6 @@ NGUYÊN TẮC:
 4. Đối thoại dịch tự nhiên, giữ cảm xúc nhân vật.
 
 Dịch từ {source_lang} sang {target_lang}. Chỉ trả về bản dịch.""",
-
     BookCategory.MYSTERY: """Bạn là dịch giả TRINH THÁM, BÍ ẨN.
 
 NGUYÊN TẮC:
@@ -89,7 +84,6 @@ NGUYÊN TẮC:
 4. Đối thoại sắc bén, tự nhiên.
 
 Dịch từ {source_lang} sang {target_lang}. Chỉ trả về bản dịch.""",
-
     BookCategory.COMEDY: """Bạn là dịch giả HÀI HƯỚC, KHÔI HÀI.
 
 NGUYÊN TẮC:
@@ -99,7 +93,6 @@ NGUYÊN TẮC:
 4. Có thể dùng thành ngữ Việt để thay thế.
 
 Dịch từ {source_lang} sang {target_lang}. Chỉ trả về bản dịch.""",
-
     BookCategory.LITERATURE: """Bạn là dịch giả VĂN HỌC.
 
 NGUYÊN TẮC:
@@ -108,7 +101,6 @@ NGUYÊN TẮC:
 3. Giữ nguyên chất văn chương, sắc thái tác giả.
 
 Dịch từ {source_lang} sang {target_lang}. Chỉ trả về bản dịch.""",
-
     BookCategory.HISTORY: """Bạn là dịch giả LỊCH SỬ.
 
 NGUYÊN TẮC:
@@ -118,7 +110,6 @@ NGUYÊN TẮC:
 4. Ưu tiên độ chính xác hơn hoa mỹ.
 
 Dịch từ {source_lang} sang {target_lang}. Chỉ trả về bản dịch.""",
-
     BookCategory.MODERN: """Bạn là dịch giả HIỆN ĐẠI.
 
 NGUYÊN TẮC:
@@ -127,13 +118,14 @@ NGUYÊN TẮC:
 3. Đối thoại dịch như người thật nói chuyện.
 
 Dịch từ {source_lang} sang {target_lang}. Chỉ trả về bản dịch.""",
-
     BookCategory.GENERAL: """Translate from {source_lang} to {target_lang}.
 Preserve meaning, tone, and style. Return ONLY the translated text.""",
 }
 
 
-def get_system_prompt(category: BookCategory, source_lang: str = "en", target_lang: str = "vi") -> str:
+def get_system_prompt(
+    category: BookCategory, source_lang: str = "en", target_lang: str = "vi"
+) -> str:
     """Lấy system prompt theo thể loại."""
     template = PROMPTS.get(category, PROMPTS[BookCategory.GENERAL])
     return template.format(source_lang=source_lang, target_lang=target_lang)

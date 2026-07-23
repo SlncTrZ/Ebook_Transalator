@@ -262,6 +262,10 @@ async def translate_agent_with_validation(
     # 2. Translate
     result = await _call_llm(messages, ctx, temperature=0.3)
 
+    # 2.5 AutoFormat (trước validate để loại bỏ lỗi chính tả ảnh hưởng đến matching)
+    from ebook_translator.utils.autoformat import autoformat_chunk
+    result = autoformat_chunk(chunk.original_text, result)
+
     # 3. Deterministic Validation — chỉ check terms CÓ trong source text
     for attempt in range(MAX_RETRIES):
         missing = check_glossary_terms(chunk.original_text, result, all_terms)
