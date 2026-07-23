@@ -2,6 +2,7 @@
 
 Wing: tcdserver | Topic: ebook_translator | Updated: 2026-07-22 14:00
 """
+
 from __future__ import annotations
 
 from pathlib import Path
@@ -133,7 +134,11 @@ async def _export_epub(
         chap.content = "<html><body>" + "".join(content_parts) + "</body></html>"
         ep.add_item(chap)
         all_items.append(chap)
-        toc_links.append(epub.Link(f"chap_{ch_idx + 1}.xhtml", f"Chapter {ch_idx + 1}", f"ch{ch_idx + 1}"))
+        toc_links.append(
+            epub.Link(
+                f"chap_{ch_idx + 1}.xhtml", f"Chapter {ch_idx + 1}", f"ch{ch_idx + 1}"
+            )
+        )
 
     ep.toc = toc_links
     ep.add_item(epub.EpubNcx())

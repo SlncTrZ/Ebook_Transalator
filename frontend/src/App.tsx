@@ -8,7 +8,13 @@ import { Settings } from "./components/Settings";
 import { Reader } from "./components/Reader";
 import type { Book } from "./api";
 
-type Tab = "library" | "translate" | "reader" | "glossary" | "export" | "settings";
+type Tab =
+	| "library"
+	| "translate"
+	| "reader"
+	| "glossary"
+	| "export"
+	| "settings";
 
 function App() {
 	const [activeTab, setActiveTab] = useState<Tab>("library");

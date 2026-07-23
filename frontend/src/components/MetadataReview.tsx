@@ -54,11 +54,12 @@ export function MetadataReview({
 	model,
 	vendor,
 }: MetadataReviewProps) {
+	const confirmedKey = "et_confirmed_" + book.id;
 	const [analyzing, setAnalyzing] = useState(false);
 	const [metadata, setMetadata] = useState<MetadataResult | null>(null);
 	const [analyzed, setAnalyzed] = useState(false);
 	const [error, setError] = useState<string | null>(null);
-	const [confirmed, setConfirmed] = useState(false);
+	const [confirmed, setConfirmed] = useState(() => localStorage.getItem(confirmedKey) === "true");
 	const [feedback, setFeedback] = useState("");
 	const [chapterStart, setChapterStart] = useState(1);
 	const [chapterEnd, setChapterEnd] = useState(99999);
@@ -127,6 +128,7 @@ export function MetadataReview({
 			);
 			if (!res.ok) throw new Error(await res.text());
 			setConfirmed(true);
+			localStorage.setItem(confirmedKey, "true");
 		} catch (e) {
 			setError(String(e));
 		}

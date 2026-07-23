@@ -849,12 +849,24 @@ async def export_book(book_id: int, req: ExportBookRequest) -> dict:
     if book is None:
         raise HTTPException(status_code=404, detail="Book not found")
 
-    safe_title = "".join(c if c.isalnum() or c in " -_" else "_" for c in (book.title or "untitled"))
-    safe_author = "".join(c if c.isalnum() or c in " -_" else "_" for c in (book.author or "unknown"))
+    safe_title = "".join(
+        c if c.isalnum() or c in " -_" else "_" for c in (book.title or "untitled")
+    )
+    safe_author = "".join(
+        c if c.isalnum() or c in " -_" else "_" for c in (book.author or "unknown")
+    )
     output_path = req.output_path or f"{safe_title} - {safe_author}.{req.format}"
 
     try:
-        result = await do_export(d, book_id, output_path, req.mode, req.format, req.chapter_start, req.chapter_end)
+        result = await do_export(
+            d,
+            book_id,
+            output_path,
+            req.mode,
+            req.format,
+            req.chapter_start,
+            req.chapter_end,
+        )
         return {"path": result, "mode": req.mode, "format": req.format}
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
