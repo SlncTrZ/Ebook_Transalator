@@ -181,7 +181,9 @@ async def create_book(req: ImportBookRequest) -> dict:
     book_id = await d.insert_book(book)
     chunks = chunk_book(book_id, parsed.chapters)
     await d.insert_chunks(chunks)
-    await d.conn.execute("UPDATE books SET total_chunks = ? WHERE id = ?", (len(chunks), book_id))
+    await d.conn.execute(
+        "UPDATE books SET total_chunks = ? WHERE id = ?", (len(chunks), book_id)
+    )
     await d.conn.commit()
     return {
         "id": book_id,
@@ -235,7 +237,9 @@ async def upload_book(file: UploadFile = File(...)) -> dict:
     book_id = await d.insert_book(book)
     chunks = chunk_book(book_id, parsed.chapters)
     await d.insert_chunks(chunks)
-    await d.conn.execute("UPDATE books SET total_chunks = ? WHERE id = ?", (len(chunks), book_id))
+    await d.conn.execute(
+        "UPDATE books SET total_chunks = ? WHERE id = ?", (len(chunks), book_id)
+    )
     await d.conn.commit()
 
     return {
@@ -389,7 +393,9 @@ async def research_book(book_id: int, req: AnalyzeRequest) -> dict:
         "description": ctx.book_summary,
         "style_notes": ctx.style_notes,
         "confidence": 0.9 if ctx.glossary_terms else 0.5,
-        "sources": [r.get("url", "") for r in ctx.search_results] if ctx.search_results else [],
+        "sources": [r.get("url", "") for r in ctx.search_results]
+        if ctx.search_results
+        else [],
         "from_knowledge": not bool(ctx.search_results),
         "glossary_suggestions": ctx.glossary_terms,
     }
@@ -508,7 +514,9 @@ async def start_translate(req: StartTranslateRequest) -> dict:
         book_id = await d.insert_book(book)
         chunks = chunk_book(book_id, parsed.chapters)
         await d.insert_chunks(chunks)
-        await d.conn.execute("UPDATE books SET total_chunks = ? WHERE id = ?", (len(chunks), book_id))
+        await d.conn.execute(
+            "UPDATE books SET total_chunks = ? WHERE id = ?", (len(chunks), book_id)
+        )
         await d.conn.commit()
 
     api_key = (

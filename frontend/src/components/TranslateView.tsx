@@ -84,7 +84,7 @@ export function TranslateView({
 			setError(String(e));
 			setRunning(false);
 		}
-	}, [book, apiKey, model, category]);
+	}, [book, apiKey, model, category, vendor, chapterStart, chapterEnd, agentic]);
 
 	const handleCancel = useCallback(async () => {
 		if (cancelRef.current) cancelRef.current();
