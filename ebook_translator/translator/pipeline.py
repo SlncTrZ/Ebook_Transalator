@@ -50,12 +50,12 @@ class TranslationConfig:
     request_timeout: int = 120
 
     def __post_init__(self) -> None:
-        """Auto-fill base_url + default model tu vendor neu chua set."""
-        if not self.model:
-            v = VENDORS.get(self.vendor)
-            if v:
-                self.model = self.model or v.default_model
-                self.base_url = self.base_url or v.base_url
+        """Auto-fill base_url + default model tu vendor."""
+        v = VENDORS.get(self.vendor)
+        if v:
+            self.base_url = self.base_url or v.base_url
+            if not self.model:
+                self.model = v.default_model
 
 
 _RETRY_EXCEPTIONS = (

@@ -53,7 +53,7 @@ export function Settings({
 	useEffect(() => {
 		const v = vendors.find((v) => v.id === vendor);
 		// Chinh set default model neu model hien tai la default cu (gpt-4o-mini) hoac rong
-		if (v && v.default_model && (!model || model === 'gpt-4o-mini')) {
+		if (v && v.default_model && (!model || model === "gpt-4o-mini")) {
 			onModelChange(v.default_model);
 		}
 	}, [vendor]);

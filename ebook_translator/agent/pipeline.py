@@ -31,6 +31,7 @@ class AgentContext:
 
     book_id: int = 0
     title: str = ""
+    localized_title: str = ""
     author: str = ""
     source_lang: str = "en"
     target_lang: str = "vi"
@@ -80,9 +81,24 @@ async def _call_llm(
 RESEARCH_SYSTEM = """You are a Research Agent. Analyze the book excerpt.
 Return JSON with:
 {
-  "title_original": "original title",
-  "title_localized": "Vietnamese translation of title",
-  "author": "author name (Vietnamese form if known)",
+  "title_original": "original title in source language",
+  "title_localized": "VIETNAMESE TRANSLATION of the title — this MUST be different from title_original, translated to Vietnamese",
+  "author": "author name (Vietnamese form if known — translate Chinese names to Vietnamese)",
+  "source_lang": "language code",
+  "target_lang": "language code (default: vi)",
+  "category": "van_hoc | lich_su | hien_dai | tien_hiep | general",
+  "summary": "brief Vietnamese summary (max 200 chars)",
+  "style_notes": "notes on writing style/tone",
+  "needs_more_search": true/false,
+  "search_query": "what to search next if needed",
+  "confidence": 0.0-1.0,
+  "glossary_suggestions": [{"source": "original term", "target": "Vietnamese translation"}]
+}
+
+IMPORTANT: title_localized MUST be Vietnamese, NOT the original language.
+Example: title_original="San the" -> title_localized="Tam The"
+Example: title_original="Hong Tran Ma Dao" -> title_localized="Hong Tran Ma Dao"
+Example: title_original="The Lord of the Rings" -> title_localized="Chua Te cua nhung Chiec Nhan"
   "source_lang": "language code",
   "target_lang": "language code (default: vi)",
   "category": "van_hoc | lich_su | hien_dai | tien_hiep | general",
@@ -119,6 +135,9 @@ async def research_agent(preview: str, ctx: AgentContext) -> AgentContext:
         return ctx
 
     ctx.title = parsed.get("title_original", ctx.title)
+    ctx.localized_title = parsed.get(
+        "title_localized", parsed.get("localized_title", "")
+    )
     ctx.author = parsed.get("author", ctx.author)
     ctx.source_lang = parsed.get("source_lang", ctx.source_lang)
     ctx.category = parsed.get("category", ctx.category)

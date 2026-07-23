@@ -389,7 +389,7 @@ async def research_book(book_id: int, req: AnalyzeRequest) -> dict:
         "source_lang": ctx.source_lang,
         "target_lang": ctx.target_lang,
         "category": ctx.category,
-        "localized_title": ctx.title,
+        "localized_title": ctx.localized_title or ctx.title,
         "description": ctx.book_summary,
         "style_notes": ctx.style_notes,
         "confidence": 0.9 if ctx.glossary_terms else 0.5,
