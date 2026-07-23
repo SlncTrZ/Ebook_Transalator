@@ -57,26 +57,31 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
 // Books
 export const listBooks = () => request<Book[]>("/books");
 export const getBook = (id: number) => request<Book>(`/books/${id}`);
-    export const createBook = (filePath: string) =>
-    	request<{ id: number; title: string; chunks: number; status: string }>(
-    		"/books",
-    		{ method: "POST", body: JSON.stringify({ file_path: filePath }) },
-    	);
+export const createBook = (filePath: string) =>
+	request<{ id: number; title: string; chunks: number; status: string }>(
+		"/books",
+		{ method: "POST", body: JSON.stringify({ file_path: filePath }) },
+	);
 
-    export const uploadBook = (file: File) => {
-    	const formData = new FormData();
-    	formData.append("file", file);
-    	return fetch(`${API_BASE}/books/upload`, {
-    		method: "POST",
-    		body: formData,
-    	}).then(async (res) => {
-    		if (!res.ok) {
-    			const text = await res.text();
-    			throw new Error(text);
-    		}
-    		return res.json() as Promise<{ id: number; title: string; chunks: number; status: string }>;
-    	});
-    };
+export const uploadBook = (file: File) => {
+	const formData = new FormData();
+	formData.append("file", file);
+	return fetch(`${API_BASE}/books/upload`, {
+		method: "POST",
+		body: formData,
+	}).then(async (res) => {
+		if (!res.ok) {
+			const text = await res.text();
+			throw new Error(text);
+		}
+		return res.json() as Promise<{
+			id: number;
+			title: string;
+			chunks: number;
+			status: string;
+		}>;
+	});
+};
 export const updateBook = (id: number, data: Partial<Book>) =>
 	request<{ ok: boolean }>(`/books/${id}`, {
 		method: "PATCH",
@@ -127,6 +132,8 @@ export const startTranslate = (
 	apiKey: string,
 	model: string,
 	category: string,
+	chapterStart = 0,
+	chapterEnd = 99999,
 ) =>
 	request<{ book_id: number; status: string }>("/translate/start", {
 		method: "POST",
@@ -136,6 +143,8 @@ export const startTranslate = (
 			api_key: apiKey,
 			model,
 			category,
+			chapter_start: chapterStart,
+			chapter_end: chapterEnd,
 		}),
 	});
 

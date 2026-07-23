@@ -48,6 +48,8 @@ export function TranslateView({
 				apiKey,
 				model,
 				category,
+				1,
+				99999,
 			);
 			const bookId = result.book_id;
 
@@ -111,8 +113,10 @@ export function TranslateView({
 				book={book}
 				apiKey={apiKey}
 				model={model}
-				onStartTranslate={(_id) => {
+				vendor={vendor}
+				onStartTranslate={(_id, _start, _end) => {
 					setRunning(true);
+					// _start/_end for chapter range
 				}}
 			/>
 

@@ -23,8 +23,16 @@ logger = logging.getLogger(__name__)
 
 SYSTEM_PROMPT = (
     "You are a professional literary translator. Translate the following text "
-    "from {source_lang} to {target_lang}. Preserve the original meaning, tone, "
-    "and style. Return only the translated text, no explanations."
+    "from {source_lang} to {target_lang}.\n\n"
+    "RULES:\n"
+    "1. Preserve the original meaning, tone, and style.\n"
+    "2. For proper nouns, character names, skills, items, and techniques: "
+    "capitalize the FIRST LETTER of each word in Vietnamese.\n"
+    "   Example: 'thiên địa pháp tắc' -> 'Thiên Địa Pháp Tắc'\n"
+    "   Example: 'hỏa cầu thuật' -> 'Hỏa Cầu Thuật'\n"
+    "   Example: 'kiếm' -> 'Kiếm'\n"
+    "3. Use the provided glossary terms exactly as given.\n"
+    "4. Return only the translated text, no explanations."
 )
 
 
@@ -75,8 +83,11 @@ class TranslationPipeline:
     def _build_user_prompt(self, chunk: Chunk, glossary: list[GlossaryEntry]) -> str:
         prompt = chunk.original_text
         if glossary:
-            terms = "\n".join(f"{g.source_term} -> {g.target_term}" for g in glossary)
-            prompt = f"[Glossary]\n{terms}\n\n[Text]\n{chunk.original_text}"
+            terms = "\n".join(
+                f"{g.source_term} -> {g.target_term.title() if g.target_term.islower() else g.target_term}"
+                for g in glossary
+            )
+            prompt = f"[Glossary - use these terms EXACTLY, they are already capitalized]\n{terms}\n\n[Text]\n{chunk.original_text}"
         return prompt
 
     def _build_messages(

@@ -29,6 +29,7 @@ from ebook_translator.parsers.txt_parser import TxtParser
 from ebook_translator.translator.pipeline import TranslationConfig, TranslationPipeline
 from ebook_translator.translator.prompts import CATEGORY_INFO, get_system_prompt
 from ebook_translator.utils.chunker import chunk_book
+from ebook_translator.agent.web_search import get_preview_text, extract_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -43,17 +44,6 @@ _cancel_event = asyncio.Event()
 
 
 # ── Request/Response models ──────────────────────────────────────────────
-
-
-class StartTranslateRequest(BaseModel):
-    file_path: str
-    vendor: str = "openai"
-    api_key: str = ""
-    model: str = ""
-    source_lang: str = "en"
-    target_lang: str = "vi"
-    category: str = "general"
-    base_url: str = ""
 
 
 class ImportBookRequest(BaseModel):
@@ -90,8 +80,25 @@ class UpdateBookRequest(BaseModel):
 
 
 class AnalyzeRequest(BaseModel):
+    vendor: str = "openai"
     api_key: str = ""
-    model: str = "gpt-4o-mini"
+    model: str = ""
+    base_url: str = ""
+    user_feedback: str = ""
+    force_search: bool = False
+
+
+class StartTranslateRequest(BaseModel):
+    file_path: str
+    vendor: str = "openai"
+    api_key: str = ""
+    model: str = ""
+    source_lang: str = "en"
+    target_lang: str = "vi"
+    category: str = "general"
+    base_url: str = ""
+    chapter_start: int = 0
+    chapter_end: int = 99999
 
 
 class ConfirmMetadataRequest(BaseModel):
@@ -99,6 +106,7 @@ class ConfirmMetadataRequest(BaseModel):
     author: str = ""
     localized_title: str = ""
     source_lang: str = "en"
+    target_lang: str = "vi"
     category: str = "general"
 
 
@@ -188,7 +196,10 @@ async def upload_book(file: UploadFile = File(...)) -> dict:
 
     ext = Path(file.filename).suffix.lower()
     if ext not in (".epub", ".txt"):
-        raise HTTPException(status_code=400, detail=f"Unsupported format: {ext}. Only .epub and .txt allowed.")
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported format: {ext}. Only .epub and .txt allowed.",
+        )
 
     # Save to temp
     temp_dir = Path(tempfile.gettempdir()) / "ebook_translator_uploads"
@@ -265,6 +276,8 @@ async def update_book(book_id: int, req: UpdateBookRequest) -> dict:
 @app.post("/api/books/{book_id}/analyze")
 async def analyze_book(book_id: int, req: AnalyzeRequest) -> dict:
     """Web Search Agent: phân tích metadata sách, đề xuất bản địa hóa."""
+    from ebook_translator.translator.adapters import VENDORS
+
     d = _get_db()
     book = await d.get_book(book_id)
     if book is None:
@@ -274,20 +287,39 @@ async def analyze_book(book_id: int, req: AnalyzeRequest) -> dict:
     if not api_key:
         raise HTTPException(status_code=400, detail="API key required")
 
+    base_url = req.base_url
+    if not base_url:
+        v = VENDORS.get(req.vendor)
+        if v:
+            base_url = v.base_url
+
+    model = req.model or (
+        VENDORS.get(req.vendor).default_model
+        if VENDORS.get(req.vendor)
+        else "gpt-4o-mini"
+    )
+
     try:
         preview = await get_preview_text(book.file_path)
         result = await extract_metadata(
-            preview=preview, api_key=api_key, model=req.model
+            preview=preview,
+            api_key=api_key,
+            model=model,
+            base_url=base_url,
+            user_feedback=req.user_feedback,
+            force_search=req.force_search,
         )
         return {
             "title": result.title or book.title,
             "author": result.author or book.author,
             "source_lang": result.source_lang,
+            "target_lang": result.target_lang,
             "localized_title": result.localized_title,
             "category": result.category,
             "description": result.description,
             "confidence": result.confidence,
             "sources": result.sources,
+            "from_knowledge": result.from_knowledge,
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e)) from e
@@ -302,11 +334,12 @@ async def confirm_metadata(book_id: int, req: ConfirmMetadataRequest) -> dict:
         raise HTTPException(status_code=404, detail="Book not found")
 
     await d.conn.execute(
-        "UPDATE books SET title=?, author=?, source_lang=?, category=? WHERE id=?",
+        "UPDATE books SET title=?, author=?, source_lang=?, target_lang=?, category=? WHERE id=?",
         (
             req.title or book.title,
             req.author or book.author,
             req.source_lang,
+            req.target_lang,
             req.category,
             book_id,
         ),
