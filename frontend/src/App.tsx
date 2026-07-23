@@ -4,9 +4,10 @@ import { Library } from "./components/Library";
 import { TranslateView } from "./components/TranslateView";
 import { GlossaryEditor } from "./components/GlossaryEditor";
 import { Settings } from "./components/Settings";
+import { Reader } from "./components/Reader";
 import type { Book } from "./api";
 
-type Tab = "library" | "translate" | "glossary" | "settings";
+type Tab = "library" | "translate" | "reader" | "glossary" | "settings";
 
 function App() {
 	const [activeTab, setActiveTab] = useState<Tab>("library");
@@ -59,6 +60,12 @@ function App() {
 						🌐 Translate
 					</button>
 					<button
+						className={`nav-btn ${activeTab === "reader" ? "active" : ""}`}
+						onClick={() => setActiveTab("reader")}
+					>
+						📖 Reader
+					</button>
+					<button
 						className={`nav-btn ${activeTab === "glossary" ? "active" : ""}`}
 						onClick={() => setActiveTab("glossary")}
 					>
@@ -89,6 +96,7 @@ function App() {
 						vendor={vendor}
 					/>
 				)}
+				{activeTab === "reader" && <Reader bookId={selectedBook?.id ?? null} />}
 				{activeTab === "glossary" && (
 					<GlossaryEditor bookId={selectedBook?.id ?? null} />
 				)}

@@ -441,6 +441,37 @@ async def list_chunks(book_id: int, status: str | None = None) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+@app.get("/api/books/{book_id}/reader")
+async def reader_chunks(
+    book_id: int,
+    chapter_start: int = 1,
+    chapter_end: int = 99999,
+    status_filter: str = "all",
+) -> dict:
+    """Reader endpoint: tra ve chunks voi original + translated text."""
+    d = _get_db()
+    sql = (
+        "SELECT id, chapter_idx, paragraph_idx, original_text, translated_text, status "
+        "FROM chunks WHERE book_id = ?"
+    )
+    params: list = [book_id]
+    if chapter_end < 99999 or chapter_start > 1:
+        sql += " AND chapter_idx + 1 >= ? AND chapter_idx + 1 <= ?"
+        params.extend([chapter_start, chapter_end])
+    if status_filter != "all":
+        sql += " AND status = ?"
+        params.append(status_filter)
+    sql += " ORDER BY chapter_idx, paragraph_idx"
+    cursor = await d.conn.execute(sql, params)
+    rows = await cursor.fetchall()
+    chunks = [dict(r) for r in rows]
+    return {
+        "total": len(chunks),
+        "chapters": sorted({r["chapter_idx"] for r in chunks}),
+        "chunks": chunks,
+    }
+
+
 # ── Glossary ─────────────────────────────────────────────────────────────
 
 
