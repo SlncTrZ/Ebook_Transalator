@@ -19,11 +19,6 @@ interface MetadataReviewProps {
 	apiKey: string;
 	model: string;
 	vendor: string;
-	onStartTranslate: (
-		bookId: number,
-		chapterStart: number,
-		chapterEnd: number,
-	) => void;
 }
 
 const LANG: Record<string, string> = {
@@ -51,7 +46,6 @@ export function MetadataReview({
 	apiKey,
 	model,
 	vendor,
-	onStartTranslate,
 }: MetadataReviewProps) {
 	const [analyzing, setAnalyzing] = useState(false);
 	const [metadata, setMetadata] = useState<MetadataResult | null>(null);
@@ -161,19 +155,10 @@ export function MetadataReview({
 					</label>
 				</div>
 				<div className="review-actions" style={{ marginTop: 12 }}>
-					<button
-						className="btn-primary"
-						onClick={() => onStartTranslate(book.id, chapterStart, chapterEnd)}
-					>
-						▶ Translate Range
-					</button>
-					<button
-						className="btn-primary"
-						onClick={() => onStartTranslate(book.id, 1, 99999)}
-					>
-						▶ Translate All
-					</button>
 				</div>
+			<p className="hint" style={{ color: "#3fb950", fontWeight: 600 }}>
+				✅ Metadata confirmed! Go to Translate tab and press Start.
+			</p>
 			</div>
 		);
 	}

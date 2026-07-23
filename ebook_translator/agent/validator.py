@@ -5,6 +5,7 @@ Bỏ qua term không xuất hiện → tránh false positive, tránh infinite lo
 
 Wing: tcdserver | Topic: ebook_translator | Updated: 2026-07-22 14:00
 """
+
 from __future__ import annotations
 
 import re

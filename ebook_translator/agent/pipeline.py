@@ -249,7 +249,9 @@ async def translate_agent_with_validation(
 
         logger.warning(
             "[Validate] Missing terms (attempt %d/%d): %s",
-            attempt + 1, MAX_RETRIES, missing,
+            attempt + 1,
+            MAX_RETRIES,
+            missing,
         )
         retry_prompt = build_retry_prompt(chunk.original_text, result, missing)
         messages = [
@@ -265,7 +267,8 @@ async def translate_agent_with_validation(
     if missing:
         logger.warning(
             "[Validate] Still missing after %d retries (continuing): %s",
-            MAX_RETRIES, missing,
+            MAX_RETRIES,
+            missing,
         )
 
     # 4. Save cache

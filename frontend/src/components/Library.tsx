@@ -156,15 +156,21 @@ export function Library({ onSelectBook, selectedBook }: LibraryProps) {
 										: "—"}
 								</td>
 								<td>
-    								<button onClick={() => onSelectBook(book)}>Translate</button>
-    								<button onClick={async () => {
-    									if (confirm('Delete this book and all translations?')) {
-    										await deleteBook(book.id);
-    										loadBooks();
-    									}
-    								}} className="btn-small" style={{ marginLeft: 4, color: '#f85149' }}>🗑</button>
-    							</td>
-    						</tr>
+									<button onClick={() => onSelectBook(book)}>Translate</button>
+									<button
+										onClick={async () => {
+											if (confirm("Delete this book and all translations?")) {
+												await deleteBook(book.id);
+												loadBooks();
+											}
+										}}
+										className="btn-small"
+										style={{ marginLeft: 4, color: "#f85149" }}
+									>
+										🗑
+									</button>
+								</td>
+							</tr>
 						))}
 					</tbody>
 				</table>
