@@ -49,7 +49,7 @@ export function Settings({
 
 	useEffect(() => {
 		const v = vendors.find((v) => v.id === vendor);
-		if (v && v.default_model && !model) {
+		if (v && v.default_model) {
 			onModelChange(v.default_model);
 		}
 	}, [vendor, vendors]);
