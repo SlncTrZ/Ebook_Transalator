@@ -20,6 +20,13 @@ class BookCategory(str, Enum):
     HISTORY = "lich_su"
     MODERN = "hien_dai"
     XIANXIA = "tien_hiep"
+    WUXIA = "vo_hiep"
+    SCI_FI = "khoa_hoc"
+    FANTASY = "ky_ao"
+    HORROR = "kinh_di"
+    ROMANCE = "ngon_tinh"
+    MYSTERY = "trinh_tham"
+    COMEDY = "hai_huoc"
     GENERAL = "general"
 
 

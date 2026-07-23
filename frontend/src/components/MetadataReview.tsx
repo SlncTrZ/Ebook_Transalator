@@ -34,10 +34,17 @@ const LANG: Record<string, string> = {
 	th: "ไทย",
 };
 const CATS: Record<string, string> = {
+	tien_hiep: "Tiên hiệp",
+	vo_hiep: "Võ hiệp",
+	khoa_hoc: "Khoa học viễn tưởng",
+	ky_ao: "Kỳ ảo",
+	kinh_di: "Kinh dị",
+	ngon_tinh: "Ngôn tình",
+	trinh_tham: "Trinh thám",
+	hai_huoc: "Hài hước",
 	van_hoc: "Văn học",
 	lich_su: "Lịch sử",
 	hien_dai: "Hiện đại",
-	tien_hiep: "Tiên hiệp",
 	general: "Tổng hợp",
 };
 
