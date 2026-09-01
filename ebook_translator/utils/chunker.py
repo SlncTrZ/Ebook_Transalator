@@ -70,7 +70,8 @@ def chunk_book(book_id: int, chapters: list[list[str]]) -> list[Chunk]:
                         Chunk(
                             book_id=book_id,
                             chapter_idx=chapter_idx,
-                            paragraph_idx=para_idx * 1000 + sub_idx,
+                            paragraph_idx=para_idx,
+                            segment_idx=sub_idx,
                             content_hash=content_hash,
                             original_text=sub_para,
                             token_count=_count_tokens(sub_para),
@@ -84,6 +85,7 @@ def chunk_book(book_id: int, chapters: list[list[str]]) -> list[Chunk]:
                         book_id=book_id,
                         chapter_idx=chapter_idx,
                         paragraph_idx=para_idx,
+                        segment_idx=0,
                         content_hash=content_hash,
                         original_text=paragraph,
                         token_count=token_count,

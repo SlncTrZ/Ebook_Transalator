@@ -39,6 +39,7 @@ CREATE TABLE IF NOT EXISTS chunks (
     book_id INTEGER NOT NULL,
     chapter_idx INTEGER NOT NULL,
     paragraph_idx INTEGER NOT NULL,
+    segment_idx INTEGER DEFAULT 0,
     content_hash TEXT NOT NULL,
     original_text TEXT NOT NULL,
     translated_text TEXT,
@@ -163,6 +164,16 @@ class Database:
             await self._connection.execute(
                 "ALTER TABLE books ADD COLUMN localized_title TEXT DEFAULT ''"
             )
+        chunk_columns = {
+            row["name"]
+            for row in await (
+                await self._connection.execute("PRAGMA table_info(chunks)")
+            ).fetchall()
+        }
+        if "segment_idx" not in chunk_columns:
+            await self._connection.execute(
+                "ALTER TABLE chunks ADD COLUMN segment_idx INTEGER DEFAULT 0"
+            )
         job_columns = {
             row["name"]
             for row in await (
@@ -284,13 +295,14 @@ class Database:
 
     async def insert_chunks(self, chunks: list[Chunk]) -> None:
         await self.conn.executemany(
-            "INSERT INTO chunks (book_id, chapter_idx, paragraph_idx, content_hash, original_text, token_count) "
-            "VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT INTO chunks (book_id, chapter_idx, paragraph_idx, segment_idx, content_hash, original_text, token_count) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?)",
             [
                 (
                     c.book_id,
                     c.chapter_idx,
                     c.paragraph_idx,
+                    c.segment_idx,
                     c.content_hash,
                     c.original_text,
                     c.token_count,
@@ -304,7 +316,7 @@ class Database:
         """Return retryable chunks: never translated or previously failed."""
         cursor = await self.conn.execute(
             "SELECT * FROM chunks WHERE book_id = ? AND status IN ('pending', 'failed') "
-            "ORDER BY chapter_idx, paragraph_idx",
+            "ORDER BY chapter_idx, paragraph_idx, segment_idx",
             (book_id,),
         )
         rows = await cursor.fetchall()
@@ -472,7 +484,7 @@ class Database:
         if job["chapter_end"] < 99999 or job["chapter_start"] > 0:
             sql += " AND chapter_idx + 1 >= ? AND chapter_idx + 1 <= ?"
             params.extend([max(1, job["chapter_start"]), job["chapter_end"]])
-        sql += " ORDER BY chapter_idx, paragraph_idx"
+        sql += " ORDER BY chapter_idx, paragraph_idx, segment_idx"
         cursor = await self.conn.execute(sql, params)
         remaining = [Chunk(**dict(row)) for row in await cursor.fetchall()]
         progress = await self.get_chunk_progress(

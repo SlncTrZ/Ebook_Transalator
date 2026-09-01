@@ -42,9 +42,9 @@ class ContextBuilder:
             return TranslationContext()
 
         cursor = await connection.execute(
-            "SELECT chapter_idx, paragraph_idx, original_text, translated_text, status "
+            "SELECT chapter_idx, paragraph_idx, segment_idx, original_text, translated_text, status "
             "FROM chunks WHERE book_id = ? AND chapter_idx = ? "
-            "AND paragraph_idx IN (?, ?) ORDER BY paragraph_idx",
+            "AND paragraph_idx IN (?, ?) ORDER BY paragraph_idx, segment_idx",
             (
                 chunk.book_id,
                 chunk.chapter_idx,
@@ -54,16 +54,23 @@ class ContextBuilder:
         )
         rows = await cursor.fetchall()
 
-        previous_source = ""
-        previous_translation = ""
-        next_source = ""
+        previous_source_parts: list[str] = []
+        previous_translation_parts: list[str] = []
+        next_source_parts: list[str] = []
         for row in rows:
             if row["paragraph_idx"] < chunk.paragraph_idx:
-                previous_source = row["original_text"] or ""
+                if row["original_text"]:
+                    previous_source_parts.append(row["original_text"])
                 if row["status"] == "done" and row["translated_text"]:
-                    previous_translation = row["translated_text"]
-            elif row["paragraph_idx"] > chunk.paragraph_idx:
-                next_source = row["original_text"] or ""
+                    previous_translation_parts.append(row["translated_text"])
+            elif row["paragraph_idx"] > chunk.paragraph_idx and row["original_text"]:
+                next_source_parts.append(row["original_text"])
+
+        previous_source = " ".join(part.strip() for part in previous_source_parts if part.strip())
+        previous_translation = " ".join(
+            part.strip() for part in previous_translation_parts if part.strip()
+        )
+        next_source = " ".join(part.strip() for part in next_source_parts if part.strip())
 
         return self._bounded(previous_source, previous_translation, next_source)
 

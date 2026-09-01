@@ -101,3 +101,37 @@ async def test_epub_export_preserves_css_and_document_structure(epub_case) -> No
     soup = BeautifulSoup(chapter.get_content(), "lxml")
     assert soup.find("h1").get_text(strip=True) == "Tiêu đề"
     assert [p.get_text(strip=True) for p in soup.find_all("p")][:2] == ["Đoạn một", "Đoạn hai"]
+
+
+@pytest.mark.asyncio
+async def test_epub_export_rejoins_multiple_segments_into_source_paragraph(epub_case) -> None:
+    database, book_id, output_path = epub_case
+    await database.insert_chunks(
+        [
+            Chunk(
+                book_id=book_id,
+                chapter_idx=0,
+                paragraph_idx=1,
+                segment_idx=1,
+                content_hash="epub-p1-segment-2",
+                original_text="continuation",
+            )
+        ]
+    )
+    cursor = await database.conn.execute(
+        "SELECT id FROM chunks WHERE book_id = ? AND paragraph_idx = 1 AND segment_idx = 1",
+        (book_id,),
+    )
+    extra_id = (await cursor.fetchone())["id"]
+    await database.update_chunk_result(extra_id, "tiếp nối", "done")
+
+    await export_book(database, book_id, str(output_path), format="epub")
+
+    result = epub.read_epub(str(output_path))
+    documents = [item for item in result.get_items() if item.get_type() == ITEM_DOCUMENT]
+    chapter = next(item for item in documents if item.file_name.endswith("ch1.xhtml"))
+    soup = BeautifulSoup(chapter.get_content(), "lxml")
+    assert [p.get_text(strip=True) for p in soup.find_all("p")][:2] == [
+        "Đoạn một tiếp nối",
+        "Đoạn hai",
+    ]

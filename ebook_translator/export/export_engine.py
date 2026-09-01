@@ -40,10 +40,10 @@ async def export_book(
 
     # Lấy chunks đã dịch
     cursor = await db.conn.execute(
-        "SELECT chapter_idx, paragraph_idx, original_text, translated_text, status "
+        "SELECT chapter_idx, paragraph_idx, segment_idx, original_text, translated_text, status "
         "FROM chunks WHERE book_id = ? AND status = 'done' "
         "AND chapter_idx + 1 >= ? AND chapter_idx + 1 <= ? "
-        "ORDER BY chapter_idx, paragraph_idx",
+        "ORDER BY chapter_idx, paragraph_idx, segment_idx",
         (book_id, chapter_start, chapter_end),
     )
     rows = await cursor.fetchall()
@@ -141,12 +141,18 @@ async def _export_epub_preserving_source(
                 continue
 
             translated_chunks = chapters.get(chapter_idx, [])
-            by_paragraph = {chunk["paragraph_idx"]: chunk for chunk in translated_chunks}
+            by_paragraph: dict[int, list[dict]] = {}
+            for chunk in translated_chunks:
+                by_paragraph.setdefault(chunk["paragraph_idx"], []).append(chunk)
             for paragraph_idx, element in enumerate(source_elements):
-                chunk = by_paragraph.get(paragraph_idx)
-                if not chunk:
+                paragraph_chunks = by_paragraph.get(paragraph_idx, [])
+                if not paragraph_chunks:
                     continue
-                translated = chunk["translated_text"] or ""
+                translated = " ".join(
+                    (chunk["translated_text"] or "").strip()
+                    for chunk in paragraph_chunks
+                    if (chunk["translated_text"] or "").strip()
+                )
                 if mode == "bilingual":
                     translated_tag = soup.new_tag("p")
                     translated_tag["class"] = ["ebook-translator-translation"]

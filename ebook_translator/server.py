@@ -473,12 +473,12 @@ async def confirm_metadata(book_id: int, req: ConfirmMetadataRequest) -> dict:
 @app.get("/api/books/{book_id}/chunks")
 async def list_chunks(book_id: int, status: str | None = None) -> list[dict]:
     d = _get_db()
-    sql = "SELECT id, chapter_idx, paragraph_idx, status, token_count, error_log FROM chunks WHERE book_id = ?"
+    sql = "SELECT id, chapter_idx, paragraph_idx, segment_idx, status, token_count, error_log FROM chunks WHERE book_id = ?"
     params: list = [book_id]
     if status:
         sql += " AND status = ?"
         params.append(status)
-    sql += " ORDER BY chapter_idx, paragraph_idx"
+    sql += " ORDER BY chapter_idx, paragraph_idx, segment_idx"
     cursor = await d.conn.execute(sql, params)
     rows = await cursor.fetchall()
     return [dict(r) for r in rows]
@@ -563,14 +563,14 @@ async def book_qa(
 
     glossary = await d.get_glossary(book_id)
     sql = (
-        "SELECT id, chapter_idx, paragraph_idx, original_text, translated_text, status "
+        "SELECT id, chapter_idx, paragraph_idx, segment_idx, original_text, translated_text, status "
         "FROM chunks WHERE book_id = ? AND translated_text IS NOT NULL"
     )
     params: list[int] = [book_id]
     if chapter_end < 99999 or chapter_start > 1:
         sql += " AND chapter_idx + 1 >= ? AND chapter_idx + 1 <= ?"
         params.extend([chapter_start, chapter_end])
-    sql += " ORDER BY chapter_idx, paragraph_idx"
+    sql += " ORDER BY chapter_idx, paragraph_idx, segment_idx"
     cursor = await d.conn.execute(sql, params)
     rows = await cursor.fetchall()
 
@@ -619,7 +619,7 @@ async def reader_chunks(
     """Reader endpoint: tra ve chunks voi original + translated text."""
     d = _get_db()
     sql = (
-        "SELECT id, chapter_idx, paragraph_idx, original_text, translated_text, status "
+        "SELECT id, chapter_idx, paragraph_idx, segment_idx, original_text, translated_text, status "
         "FROM chunks WHERE book_id = ?"
     )
     params: list = [book_id]
@@ -629,7 +629,7 @@ async def reader_chunks(
     if status_filter != "all":
         sql += " AND status = ?"
         params.append(status_filter)
-    sql += " ORDER BY chapter_idx, paragraph_idx"
+    sql += " ORDER BY chapter_idx, paragraph_idx, segment_idx"
     cursor = await d.conn.execute(sql, params)
     rows = await cursor.fetchall()
     chunks = [dict(r) for r in rows]

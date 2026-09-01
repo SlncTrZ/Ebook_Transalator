@@ -56,6 +56,7 @@ class Chunk:
     book_id: int = 0
     chapter_idx: int = 0
     paragraph_idx: int = 0
+    segment_idx: int = 0
     content_hash: str = ""
     original_text: str = ""
     translated_text: str | None = None

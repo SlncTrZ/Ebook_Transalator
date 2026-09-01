@@ -44,19 +44,21 @@ async def export_epub(
     # Load all translated chunks
     db_con = db.conn
     cursor = await db_con.execute(
-        "SELECT chapter_idx, paragraph_idx, original_text, translated_text "
+        "SELECT chapter_idx, paragraph_idx, segment_idx, original_text, translated_text "
         "FROM chunks WHERE book_id = ? AND status = 'done' "
-        "ORDER BY chapter_idx, paragraph_idx",
+        "ORDER BY chapter_idx, paragraph_idx, segment_idx",
         (book_id,),
     )
     rows = await cursor.fetchall()
 
     # Group translations by chapter_idx
-    chapters_map: dict[int, dict[int, str]] = {}
+    chapters_map: dict[int, dict[int, list[str]]] = {}
     for row in rows:
         ch = row["chapter_idx"]
         para = row["paragraph_idx"]
-        chapters_map.setdefault(ch, {})[para] = row["translated_text"]
+        chapters_map.setdefault(ch, {}).setdefault(para, []).append(
+            row["translated_text"] or ""
+        )
 
     # Walk through original items and replace text
     chapter_index = 0
@@ -70,7 +72,9 @@ async def export_epub(
                 soup.find_all(["p", "h1", "h2", "h3", "h4", "h5", "h6"])
             ):
                 if para_index in translations:
-                    translated = translations[para_index]
+                    translated = " ".join(
+                        part.strip() for part in translations[para_index] if part.strip()
+                    )
                     new_tag = soup.new_tag(p.name)
                     new_tag.string = translated
                     p.replace_with(new_tag)
