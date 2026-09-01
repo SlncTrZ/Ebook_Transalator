@@ -84,15 +84,33 @@ export interface BookQAResult {
 }
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
-	const res = await fetch(`${API_BASE}${path}`, {
-		headers: { "Content-Type": "application/json" },
-		...options,
-	});
-	if (!res.ok) {
-		const text = await res.text();
-		throw new Error(`API error ${res.status}: ${text}`);
+	const method = (options?.method ?? "GET").toUpperCase();
+	const attempts = method === "GET" ? 6 : 1;
+	let lastNetworkError: unknown = null;
+
+	for (let attempt = 1; attempt <= attempts; attempt += 1) {
+		try {
+			const res = await fetch(`${API_BASE}${path}`, {
+				headers: { "Content-Type": "application/json" },
+				...options,
+			});
+			if (!res.ok) {
+				const text = await res.text();
+				throw new Error(`API error ${res.status}: ${text}`);
+			}
+			return res.json();
+		} catch (error) {
+			// Retry only connection-level GET failures during desktop sidecar startup.
+			// HTTP errors and mutations must fail immediately to avoid duplicate writes.
+			if (!(error instanceof TypeError) || attempt === attempts) throw error;
+			lastNetworkError = error;
+			await new Promise((resolve) => setTimeout(resolve, 250));
+		}
 	}
-	return res.json();
+
+	throw lastNetworkError instanceof Error
+		? lastNetworkError
+		: new Error("Backend connection failed");
 }
 
 // Books
