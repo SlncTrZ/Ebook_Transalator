@@ -46,7 +46,17 @@ export function GlossaryEditor({ bookId }: GlossaryEditorProps) {
 
 	return (
 		<div className="glossary-editor">
-			<p className="muted">Book-scoped terminology. Exact mappings are injected during translation.</p>
+			<div className="workspace-intro compact-intro">
+				<div>
+					<span className="section-index">TERM / {String(entries.length).padStart(2, "0")}</span>
+					<strong>Terminology control</strong>
+					<p>Book-scoped mappings are injected exactly into translation prompts.</p>
+				</div>
+			</div>
+			<div className="section-bar">
+				<div><span className="section-index">01</span><strong>Add mapping</strong></div>
+				<span>Source and target terms are case-sensitive on output.</span>
+			</div>
 			<div className="glossary-form">
 				<input placeholder="Source term" value={source} onChange={(event) => setSource(event.target.value)} />
 				<input placeholder="Target term" value={target} onChange={(event) => setTarget(event.target.value)} />
@@ -58,7 +68,11 @@ export function GlossaryEditor({ bookId }: GlossaryEditorProps) {
 
 			{error && <div className="error-banner">{error}</div>}
 			{entries.length === 0 ? (
-				<p className="muted">No glossary entries yet.</p>
+				<div className="empty-state compact-empty">
+					<span className="empty-state-index">TERM / 00</span>
+					<strong>No terminology rules</strong>
+					<p>Add names, technical terms, ranks, places or phrases that must remain consistent across the book.</p>
+				</div>
 			) : (
 				<table className="glossary-table">
 					<thead>

@@ -97,9 +97,18 @@ export function Library({ onSelectBook, selectedBook }: LibraryProps) {
 			{importError && <div className="error-banner">{importError}</div>}
 
 			{loading ? (
-				<p className="muted">Loading library…</p>
+				<div className="library-skeleton" aria-label="Loading library">
+					<div className="skeleton-row skeleton-head" />
+					<div className="skeleton-row" />
+					<div className="skeleton-row" />
+					<div className="skeleton-row" />
+				</div>
 			) : books.length === 0 ? (
-				<p className="muted">No books yet. Import an EPUB or TXT file to begin.</p>
+				<div className="empty-state">
+					<span className="empty-state-index">LIB / 00</span>
+					<strong>No source documents</strong>
+					<p>Import an EPUB or TXT file above. The document stays local and becomes the active translation workspace.</p>
+				</div>
 			) : (
 				<table className="book-table">
 					<thead>

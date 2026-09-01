@@ -40,9 +40,18 @@ export function ExportTab({ selectedBook }: ExportTabProps) {
 
 	return (
 		<div className="export-tab">
-			<p className="muted">
-				Export scope is tied to the active book. EPUB input uses source-preserving export when possible.
-			</p>
+			<div className="workspace-intro compact-intro">
+				<div>
+					<span className="section-index">OUT / ACTIVE</span>
+					<strong>Delivery package</strong>
+					<p>Export the active document with the selected range, format and source-preservation mode.</p>
+				</div>
+				<div className="mode-readout"><span>Format</span><strong>{format.toUpperCase()}</strong></div>
+			</div>
+			<div className="section-bar">
+				<div><span className="section-index">01</span><strong>Output contract</strong></div>
+				<span>EPUB source structure is preserved when the original EPUB is available.</span>
+			</div>
 
 			<div className="review-fields export-grid">
 				<label>
@@ -87,12 +96,18 @@ export function ExportTab({ selectedBook }: ExportTabProps) {
 				<p className="hint">Leave empty to use the backend generated name.</p>
 			</div>
 
-			<button className="btn-primary" onClick={() => void handleExport()} disabled={exporting}>
-				{exporting ? "Exporting…" : "Export book"}
-			</button>
+			<div className="dispatch-bar export-dispatch">
+				<div>
+					<span className="section-index">02 / Write</span>
+					<p>{mode === "bilingual" ? "Source and translation will be delivered together." : "Only translated content will be delivered."}</p>
+				</div>
+				<button className="btn-primary" onClick={() => void handleExport()} disabled={exporting}>
+					{exporting ? "Exporting…" : `Export ${format.toUpperCase()}`}
+				</button>
+			</div>
 
 			{error && <div className="error-banner">{error}</div>}
-			{result && <div className="success-banner">Exported: {result}</div>}
+			{result && <div className="success-banner"><span>Output written</span><code>{result}</code></div>}
 		</div>
 	);
 }

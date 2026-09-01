@@ -16,13 +16,19 @@ type Workspace =
 	| "export"
 	| "settings";
 
-const WORKSPACES: Array<{ id: Workspace; label: string; bookScoped: boolean }> = [
-	{ id: "library", label: "Library", bookScoped: false },
-	{ id: "translate", label: "Translate", bookScoped: true },
-	{ id: "reader", label: "Inspect", bookScoped: true },
-	{ id: "glossary", label: "Glossary", bookScoped: true },
-	{ id: "export", label: "Export", bookScoped: true },
-	{ id: "settings", label: "Settings", bookScoped: false },
+const WORKSPACES: Array<{
+	id: Workspace;
+	label: string;
+	bookScoped: boolean;
+	index: string;
+	description: string;
+}> = [
+	{ id: "library", label: "Library", bookScoped: false, index: "01", description: "Sources" },
+	{ id: "translate", label: "Translate", bookScoped: true, index: "02", description: "Run" },
+	{ id: "reader", label: "Inspect", bookScoped: true, index: "03", description: "QA + edit" },
+	{ id: "glossary", label: "Glossary", bookScoped: true, index: "04", description: "Terms" },
+	{ id: "export", label: "Export", bookScoped: true, index: "05", description: "Deliver" },
+	{ id: "settings", label: "Settings", bookScoped: false, index: "06", description: "Runtime" },
 ];
 
 function App() {
@@ -65,6 +71,11 @@ function App() {
 		return !item?.bookScoped || selectedBook !== null;
 	};
 
+	const activeMeta = WORKSPACES.find((item) => item.id === activeWorkspace);
+	const progressPercent = selectedBook && selectedBook.total_chunks > 0
+		? Math.round((selectedBook.done_chunks / selectedBook.total_chunks) * 100)
+		: 0;
+
 	return (
 		<div className="workbench-shell">
 			<aside className="workbench-rail">
@@ -72,9 +83,10 @@ function App() {
 					<div className="brand-mark">ET</div>
 					<div>
 						<strong>Ebook Translator</strong>
-						<span>Translation Workbench</span>
+						<span>Local translation workbench</span>
 					</div>
 				</div>
+				<div className="rail-rule" />
 
 				<nav className="workspace-nav" aria-label="Workspace navigation">
 					{WORKSPACES.map((item) => (
@@ -84,14 +96,20 @@ function App() {
 							disabled={!canOpen(item.id)}
 							onClick={() => setActiveWorkspace(item.id)}
 						>
-							<span>{item.label}</span>
-							{item.bookScoped && <small>Book</small>}
+							<span className="nav-index">{item.index}</span>
+							<span className="nav-copy">
+								<strong>{item.label}</strong>
+								<small>{item.description}</small>
+							</span>
 						</button>
 					))}
 				</nav>
 
 				<div className="provider-summary">
-					<span>Provider</span>
+					<div className="provider-kicker">
+						<span className="status-dot" />
+						<span>Runtime</span>
+					</div>
 					<strong>{vendor}</strong>
 					<code>{model || "default model"}</code>
 				</div>
@@ -99,16 +117,25 @@ function App() {
 
 			<section className="workbench-stage">
 				<header className="stage-header">
-					<div>
-						<span className="eyebrow">Active workspace</span>
-						<h1>{WORKSPACES.find((item) => item.id === activeWorkspace)?.label}</h1>
-					</div>
-					{selectedBook && (
-						<div className="active-book-chip">
-							<span>Active book</span>
-							<strong>{selectedBook.title || "Untitled"}</strong>
+					<div className="stage-heading-group">
+						<span className="workspace-index">{activeMeta?.index}</span>
+						<div>
+							<span className="eyebrow">Workspace / {activeMeta?.description}</span>
+							<h1>{activeMeta?.label}</h1>
 						</div>
-					)}
+					</div>
+					<div className="stage-context">
+						<div className="runtime-pill">
+							<span>{vendor}</span>
+							<strong>{model || "default"}</strong>
+						</div>
+						{selectedBook && (
+							<div className="active-book-chip">
+								<span>Active document</span>
+								<strong>{selectedBook.title || "Untitled"}</strong>
+							</div>
+						)}
+					</div>
 				</header>
 
 				<main className="stage-content">
@@ -152,7 +179,7 @@ function App() {
 			<aside className="inspector-pane">
 				<div className="inspector-heading">
 					<span className="eyebrow">Inspector</span>
-					<strong>{selectedBook ? "Book context" : "No active book"}</strong>
+					<strong>{selectedBook ? "Document context" : "No active document"}</strong>
 				</div>
 				{selectedBook ? (
 					<div className="inspector-sections">
@@ -170,19 +197,25 @@ function App() {
 							<label>Author</label>
 							<p>{selectedBook.author || "Unknown"}</p>
 						</section>
-						<section className="inspector-grid">
-							<div>
-								<label>Status</label>
-								<strong className={`status-text ${selectedBook.status}`}>
-									{selectedBook.status}
-								</strong>
+						<section>
+							<div className="inspector-grid inspector-metrics">
+								<div>
+									<label>Status</label>
+									<strong className={`status-text ${selectedBook.status}`}>
+										{selectedBook.status}
+									</strong>
+								</div>
+								<div>
+									<label>Progress</label>
+									<strong className="mono-value">{progressPercent}%</strong>
+								</div>
 							</div>
-							<div>
-								<label>Progress</label>
-								<strong className="mono-value">
-									{selectedBook.done_chunks}/{selectedBook.total_chunks}
-								</strong>
+							<div className="inspector-progress-track">
+								<div className="inspector-progress-fill" style={{ width: `${progressPercent}%` }} />
 							</div>
+							<p className="inspector-progress-copy mono-value">
+								{selectedBook.done_chunks} complete / {selectedBook.total_chunks} chunks
+							</p>
 						</section>
 						<section>
 							<label>Language</label>
@@ -196,7 +229,10 @@ function App() {
 						</section>
 					</div>
 				) : (
-					<p className="muted">Select a book in Library to unlock the translation workflow.</p>
+					<div className="inspector-empty">
+						<span className="empty-rule" />
+						<p className="muted">Open a document from Library to unlock translation, inspection and export tools.</p>
+					</div>
 				)}
 			</aside>
 		</div>

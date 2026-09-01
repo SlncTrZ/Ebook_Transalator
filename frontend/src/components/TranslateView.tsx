@@ -104,16 +104,32 @@ export function TranslateView({ book, apiKey, model, vendor }: TranslateViewProp
 
 	const startDisabled = running || (requiresApiKey && !apiKey);
 
+	const settled = progress ? progress.done + progress.failed : 0;
+	const progressPercent = progress && progress.total > 0
+		? Math.round((settled / progress.total) * 100)
+		: 0;
+
 	return (
 		<div className="translate-view">
-			<div className="book-info">
-				<strong>{book.title || "Untitled"}</strong>
-				{book.author && <span> · {book.author}</span>}
+			<div className="workspace-intro">
+				<div>
+					<span className="section-index">TR / ACTIVE</span>
+					<strong>{book.title || "Untitled"}</strong>
+					<p>{book.author || "Unknown author"}</p>
+				</div>
+				<div className="mode-readout">
+					<span>Mode</span>
+					<strong>{agentic ? "Agentic" : "Standard"}</strong>
+				</div>
 			</div>
 
 			<MetadataReview book={book} apiKey={apiKey} model={model} vendor={vendor} />
 
-			<div className="controls">
+			<div className="section-bar">
+				<div><span className="section-index">01</span><strong>Translation scope</strong></div>
+				<span>Choose chapter range and category before dispatch.</span>
+			</div>
+			<div className="controls translation-controls">
 				<label>
 					From chapter
 					<input
@@ -144,39 +160,46 @@ export function TranslateView({ book, apiKey, model, vendor }: TranslateViewProp
 			</div>
 
 			{error && <div className="error-banner">{error}</div>}
-			{agentPhase && <p className="hint">{agentPhase}</p>}
-
-			{progress && (
-				<div className="progress-section">
-					<div className="progress-bar-container">
-						<div
-							className="progress-bar-fill"
-							style={{
-								width: progress.total > 0
-									? `${((progress.done + progress.failed) / progress.total) * 100}%`
-									: "0%",
-							}}
-						/>
-					</div>
-					<p className="progress-text">
-						{progress.done} done · {progress.failed} failed · {progress.total} total
-					</p>
+			{agentPhase && (
+				<div className="run-state-line">
+					<span className={running ? "status-dot running" : "status-dot"} />
+					<span>{agentPhase}</span>
 				</div>
 			)}
 
-			<div className="actions">
-				{running ? (
-					<button className="btn-danger" onClick={() => void handleCancel()}>Cancel translation</button>
-				) : (
-					<>
-						<button className="btn-primary" onClick={() => void handleStart()} disabled={startDisabled}>
-							Start {agentic ? "Agentic" : "Standard"}
-						</button>
-						<button onClick={() => setAgentic((value) => !value)}>
-							Mode: {agentic ? "Agentic" : "Standard"}
-						</button>
-					</>
-				)}
+			{progress && (
+				<div className="progress-section run-progress-panel">
+					<div className="progress-readout">
+						<div><span>Completed</span><strong>{progressPercent}%</strong></div>
+						<div><span>Done</span><strong>{progress.done}</strong></div>
+						<div><span>Failed</span><strong className={progress.failed > 0 ? "danger-text" : ""}>{progress.failed}</strong></div>
+						<div><span>Total</span><strong>{progress.total}</strong></div>
+					</div>
+					<div className="progress-bar-container">
+						<div className="progress-bar-fill" style={{ width: `${progressPercent}%` }} />
+					</div>
+				</div>
+			)}
+
+			<div className="dispatch-bar">
+				<div>
+					<span className="section-index">02 / Dispatch</span>
+					<p>{agentic ? "Research-aware translation with validation." : "Fast deterministic translation through the configured gateway."}</p>
+				</div>
+				<div className="actions">
+					{running ? (
+						<button className="btn-danger" onClick={() => void handleCancel()}>Cancel translation</button>
+					) : (
+						<>
+							<button onClick={() => setAgentic((value) => !value)}>
+								Switch to {agentic ? "Standard" : "Agentic"}
+							</button>
+							<button className="btn-primary" onClick={() => void handleStart()} disabled={startDisabled}>
+								Start {agentic ? "Agentic" : "Standard"}
+							</button>
+						</>
+					)}
+				</div>
 			</div>
 
 			{requiresApiKey && !apiKey && (

@@ -102,6 +102,22 @@ export function Settings({
 
 	return (
 		<div className="settings">
+			<div className="workspace-intro compact-intro settings-intro">
+				<div>
+					<span className="section-index">SYS / RUNTIME</span>
+					<strong>Model runtime</strong>
+					<p>Provider, model and session credentials for the local translation gateway.</p>
+				</div>
+				<div className={`backend-readout ${serverRunning ? "online" : "offline"}`}>
+					<span>Backend</span>
+					<strong>{serverRunning ? "Online" : "Offline"}</strong>
+				</div>
+			</div>
+			<div className="section-bar">
+				<div><span className="section-index">01</span><strong>Provider</strong></div>
+				<span>Credentials remain in memory for this app session only.</span>
+			</div>
+			<div className="settings-grid">
 			<div className="setting-group">
 				<label htmlFor="vendor">AI provider</label>
 				<select id="vendor" value={vendor} onChange={(event) => handleVendorChange(event.target.value)}>
@@ -158,11 +174,12 @@ export function Settings({
 				<input type="text" value={currentVendor?.base_url || ""} disabled />
 			</div>
 
-			<div className="setting-group">
+			<div className="setting-group runtime-detail">
 				<label>Backend status</label>
 				<p className={`server-state ${serverRunning ? "online" : "offline"}`}>
-					{serverRunning ? "Running" : "Unavailable"}
+					{serverRunning ? "Running / API reachable" : "Unavailable / API not reachable"}
 				</p>
+			</div>
 			</div>
 		</div>
 	);
