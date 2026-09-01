@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import type { ReaderChunk } from "../api";
+import type { BookQAResult, QAChunkResult, ReaderChunk } from "../api";
 import {
+	getBookQA,
 	getReaderChunks,
 	rememberChunkTranslation,
 	requeueChunk,
@@ -19,14 +20,19 @@ export function Reader({ bookId }: ReaderProps) {
 	const [chapterEnd, setChapterEnd] = useState(5);
 	const [statusFilter, setStatusFilter] = useState("all");
 	const [drafts, setDrafts] = useState<Record<number, string>>({});
+	const [qa, setQa] = useState<BookQAResult | null>(null);
 
 	const load = async () => {
 		if (!bookId) return;
 		setLoading(true);
 		setError(null);
 		try {
-			const data = await getReaderChunks(bookId, chapterStart, chapterEnd, statusFilter);
+			const [data, qaData] = await Promise.all([
+				getReaderChunks(bookId, chapterStart, chapterEnd, statusFilter),
+				getBookQA(bookId, chapterStart, chapterEnd),
+			]);
 			setChunks(data.chunks);
+			setQa(qaData);
 			setDrafts(
 				Object.fromEntries(
 					data.chunks.map((chunk) => [chunk.id, chunk.translated_text ?? ""]),
@@ -41,12 +47,18 @@ export function Reader({ bookId }: ReaderProps) {
 
 	useEffect(() => {
 		if (bookId) void load();
-		else setChunks([]);
+		else {
+			setChunks([]);
+			setQa(null);
+		}
 	}, [bookId]);
 
 	const byChapter: Record<number, ReaderChunk[]> = {};
 	for (const chunk of chunks) (byChapter[chunk.chapter_idx] ??= []).push(chunk);
 	const chapterIndexes = Object.keys(byChapter).map(Number).sort((a, b) => a - b);
+	const qaByChunk = new Map<number, QAChunkResult>(
+		(qa?.chunks ?? []).map((item) => [item.chunk_id, item]),
+	);
 
 	if (!bookId) {
 		return <p className="muted">Select a book in Library to inspect its translation.</p>;
@@ -86,6 +98,14 @@ export function Reader({ bookId }: ReaderProps) {
 			</div>
 
 			{error && <div className="error-banner">{error}</div>}
+			{qa && (
+				<div className="qa-summary" aria-label="Translation quality summary">
+					<span>{qa.checked_chunks} checked</span>
+					<strong>{qa.errors} errors</strong>
+					<span>{qa.warnings} warnings</span>
+					<span>{qa.issue_chunks} affected chunks</span>
+				</div>
+			)}
 			{!loading && chunks.length === 0 && (
 				<p className="muted">No chunks match this chapter range and status filter.</p>
 			)}
@@ -94,10 +114,24 @@ export function Reader({ bookId }: ReaderProps) {
 				{chapterIndexes.map((chapterIndex) => (
 					<section key={chapterIndex} className="chapter-block">
 						<h3>Chapter {chapterIndex + 1}</h3>
-						{byChapter[chapterIndex].map((chunk) => (
-							<div key={chunk.id} className="bilingual-pair">
+						{byChapter[chapterIndex].map((chunk) => {
+							const chunkQa = qaByChunk.get(chunk.id);
+							return (
+							<div key={chunk.id} className={`bilingual-pair${chunkQa ? " has-qa-issues" : ""}`}>
 								<div className="original-text">{chunk.original_text}</div>
 								<div className="translated-text">
+									{chunkQa && (
+										<div className="qa-issues">
+											{chunkQa.issues.map((issue, index) => (
+												<div key={`${issue.code}-${index}`} className={`qa-issue ${issue.severity}`}>
+													<strong>{issue.code.replaceAll("_", " ")}</strong>
+													<span>{issue.message}</span>
+													{issue.expected && <small>Expected: {issue.expected}</small>}
+													{issue.actual && <small>Actual: {issue.actual}</small>}
+												</div>
+											))}
+										</div>
+									)}
 									<textarea
 										className="translation-editor"
 										value={drafts[chunk.id] ?? ""}
@@ -138,7 +172,8 @@ export function Reader({ bookId }: ReaderProps) {
 									</div>
 								</div>
 							</div>
-						))}
+							);
+						})}
 					</section>
 				))}
 			</div>

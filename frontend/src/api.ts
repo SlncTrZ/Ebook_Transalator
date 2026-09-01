@@ -57,6 +57,32 @@ export interface CategoryInfo {
 	[key: string]: string;
 }
 
+export interface QAIssue {
+	code: string;
+	severity: "error" | "warning";
+	message: string;
+	expected: string;
+	actual: string;
+}
+
+export interface QAChunkResult {
+	chunk_id: number;
+	chapter_idx: number;
+	paragraph_idx: number;
+	passed: boolean;
+	issues: QAIssue[];
+}
+
+export interface BookQAResult {
+	book_id: number;
+	checked_chunks: number;
+	issue_chunks: number;
+	issues: number;
+	errors: number;
+	warnings: number;
+	chunks: QAChunkResult[];
+}
+
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
 	const res = await fetch(`${API_BASE}${path}`, {
 		headers: { "Content-Type": "application/json" },
@@ -350,6 +376,15 @@ export const getReaderChunks = (
 ) =>
 	request<{ total: number; chapters: number[]; chunks: ReaderChunk[] }>(
 		`/books/${bookId}/reader?chapter_start=${chapterStart}&chapter_end=${chapterEnd}&status_filter=${statusFilter}`,
+	);
+
+export const getBookQA = (
+	bookId: number,
+	chapterStart = 1,
+	chapterEnd = 99999,
+) =>
+	request<BookQAResult>(
+		`/books/${bookId}/qa?chapter_start=${chapterStart}&chapter_end=${chapterEnd}`,
 	);
 export const updateChunkTranslation = (chunkId: number, translatedText: string) =>
 	request<{ ok: boolean; chunk_id: number }>(`/chunks/${chunkId}`, {
