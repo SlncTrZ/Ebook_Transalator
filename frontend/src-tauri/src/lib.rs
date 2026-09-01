@@ -1,4 +1,9 @@
-use tauri_plugin_shell::ShellExt;
+use std::sync::Mutex;
+
+use tauri::{Manager, RunEvent};
+use tauri_plugin_shell::{process::CommandChild, ShellExt};
+
+struct SidecarState(Mutex<Option<CommandChild>>);
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
@@ -14,9 +19,21 @@ pub fn run() {
       }
 
       let sidecar = app.shell().sidecar("ebook-translator-backend")?;
-      let (_events, _child) = sidecar.spawn()?;
+      let (_events, child) = sidecar.spawn()?;
+      app.manage(SidecarState(Mutex::new(Some(child))));
       Ok(())
     })
-    .run(tauri::generate_context!())
-    .expect("error while running Ebook Translator");
+    .build(tauri::generate_context!())
+    .expect("error while building Ebook Translator")
+    .run(|app_handle, event| {
+      if matches!(event, RunEvent::Exit | RunEvent::ExitRequested { .. }) {
+        if let Some(state) = app_handle.try_state::<SidecarState>() {
+          if let Ok(mut child) = state.0.lock() {
+            if let Some(child) = child.take() {
+              let _ = child.kill();
+            }
+          }
+        }
+      }
+    });
 }
