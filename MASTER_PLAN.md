@@ -55,44 +55,46 @@ Rules:
 
 ---
 
-## 3. Current Baseline — Verified 2026-08-31
+## 3. Current Baseline — Verified 2026-09-01
 
-### Implemented
+### Implemented and regression-covered
 
-- Python/FastAPI backend.
-- React/TypeScript frontend with Tauri project scaffold.
-- EPUB and TXT parsing.
-- Paragraph-level chunking with oversize splitting.
-- SHA-256 content fingerprinting.
-- SQLite + `aiosqlite` with WAL mode.
-- Cache table keyed by content hash + source + target + model.
-- Standard translation pipeline with retry.
-- Vendor adapter layer for OpenAI-compatible APIs, Anthropic, Gemini, and Ollama.
-- Research Agent + metadata/glossary proposal.
-- HITL metadata confirmation.
-- Deterministic glossary validation.
-- Reader and export screens.
-- TXT and generated EPUB export.
+- Python/FastAPI backend with SQLite + `aiosqlite` WAL persistence.
+- React/TypeScript workbench frontend with Tauri v2 scaffold and Python sidecar wiring.
+- EPUB and TXT import with encoding/parser hardening.
+- Paragraph chunking with stable `paragraph_idx` + `segment_idx` for oversize paragraphs.
+- SHA-256 content fingerprints and prompt-context fingerprints.
+- Unified LLM Gateway for Standard, Agentic, and Research paths.
+- Vendor adapters for OpenAI-compatible APIs, Anthropic, Gemini, and Ollama.
+- Category-aware Standard and Agentic prompting.
+- Bounded long-form neighborhood context using canonical adjacent chunks.
+- Exact response cache separated from user-approved Translation Memory.
+- Research/HITL metadata confirmation with user feedback and optional web verification.
+- Book-scoped glossary with exact target-term semantics.
+- Deterministic QA with structured issue codes surfaced in the Reader workspace.
+- Manual translation correction, explicit Translation Memory promotion, and requeue.
+- Persisted translation jobs with explicit state machine, attempt history, diagnostics, interrupted recovery, and range-safe resume.
+- Standard and Agentic resume wiring without persisting provider credentials.
+- Source-preserving EPUB export retaining non-translated archive resources, CSS/assets, package structure, spine/TOC resources, and segmented paragraph reconstruction.
+- Retry policy limited to transient network/timeout/429/5xx-style provider failures; permanent client errors fail fast.
+- Desktop-oriented workbench UI using the project-local Design Taste guardrails.
+- Backend regression suite verified at **79 passing tests**.
+- Frontend TypeScript compile verified passing.
 
-### Partial / inconsistent
+### Release blockers / not yet verified
 
-- Agentic translation wiring.
-- Multi-vendor support inside Agentic/Research LLM calls.
-- Translation progress/state consistency.
-- Chapter-range semantics.
-- Frontend/backend API contracts.
-- EPUB fidelity to original structure/CSS/assets.
-- Crash recovery for background jobs.
-- Test coverage for complete workflows.
-- Desktop packaging/release pipeline.
+- `npm run build` is blocked on the current development host by missing npm optional native bindings (`@rolldown/binding-linux-x64-gnu` and the Tauri CLI native package) while the host is running an unsupported Node 26 alpha build.
+- Rust/Cargo are not installed on the current host, so `cargo check`, `tauri build`, and installer creation are not yet verified.
+- Real-world corpus/stress testing across diverse EPUB/TXT books is not yet complete.
+- Desktop installer lifecycle still needs end-to-end verification: launch, backend readiness, sidecar shutdown, port behavior, storage paths, migration, and packaged smoke test.
 
-### Known architecture debt
+### Remaining architecture / product maturity debt
 
-- `server.py` owns too much orchestration.
-- Standard and Agentic paths do not share one LLM invocation abstraction.
-- Progress exists in multiple mutable representations.
-- Frontend contains overlapping translation/export paths.
-- Some documentation claims exceed working behavior.
+- `server.py` is still too large and owns orchestration that should eventually move into service modules.
+- Translation Memory retrieval is exact-match-first; fuzzy candidate ranking is still a target enhancement.
+- Context is neighborhood-aware but does not yet include full chapter summaries/entity registry/approved-example retrieval.
+- Metrics are useful for local diagnosis but not yet a complete per-job token/cost/performance model where provider usage data is available.
+- Legacy books imported before `segment_idx` existed cannot be safely auto-repaired if they already contain paragraph-index collisions; re-import is the safe migration path for that edge case.
 
 ---
 
@@ -512,154 +514,168 @@ A feature is DONE only when:
 
 ---
 
-## 10. Immediate Parallel Execution Plan — Two Coders
+## 10. Immediate Execution Plan — v1.0 Release Candidate
 
-The earlier P0 sequencing has been completed far enough that the next high-value work can run in two parallel lanes with strict file ownership.
+The earlier two-coder Translation Intelligence and Job Reliability lanes have been substantially completed and integrated. They are no longer the active execution plan.
 
-The project should now use **two coder lanes plus one later integration gate**.
+The project is now in **release-hardening mode**. Do not expand feature scope until the release gates below are satisfied.
 
-### 10.1 Coder 1 — Translation Intelligence
+### 10.1 Gate 1 — Stabilize the Frontend Build Environment
 
-Authoritative handoff file:
-
-```text
-CODER_1_TRANSLATION_INTELLIGENCE.md
-```
-
-Primary ownership:
+Current blocker:
 
 ```text
-ebook_translator/translator/**
-ebook_translator/agent/**
-translation/gateway/memory tests
+Unsupported Node 26 alpha runtime
++ missing npm optional native bindings
+  - @rolldown/binding-linux-x64-gnu
+  - @tauri-apps/cli-linux-x64-gnu
 ```
 
-Mission:
+Required actions:
+
+1. Move the development/build environment to Node 22 or 24 stable.
+2. Reinstall frontend dependencies cleanly under the stable Node runtime.
+3. Verify `npm run build` from `frontend/`.
+4. Do not change application code merely to work around a corrupted/incompatible native dependency install.
+
+Acceptance:
 
 ```text
-Context Engine
-→ Category-aware Standard prompting
-→ Deterministic QA
-→ Translation Memory fuzzy-ranking foundation
+npm run build PASS
+TypeScript compile PASS
+no dependency-lock drift beyond the clean stable-runtime install
 ```
 
-This coder MUST NOT modify:
+### 10.2 Gate 2 — Rust / Tauri Verification
+
+Current blocker: Rust/Cargo are not available on the verified development host.
+
+Required actions after toolchain installation:
 
 ```text
-ebook_translator/server.py
-ebook_translator/models.py
-ebook_translator/db/**
-frontend/**
-pyproject.toml
-requirements.txt
+rustc --version
+cargo --version
+cargo check
+npm run desktop:build
 ```
 
-### 10.2 Coder 2 — Job Reliability & Persistence
+Verify:
 
-Authoritative handoff file:
+- Tauri v2 shell plugin wiring compiles.
+- Python sidecar is discovered with the correct target-triple filename.
+- Backend starts before the UI needs it.
+- App closes the sidecar cleanly.
+- Port collision behavior is understandable and recoverable.
+- SQLite/app data lives in a deliberate writable application location for packaged builds.
+- Installer/package launches on the target OS.
+
+Windows packaging is the first priority release target unless deployment requirements change.
+
+### 10.3 Gate 3 — Real-World Corpus and Stress Validation
+
+Synthetic tests are necessary but not enough for v1.0.
+
+Create a local release corpus covering at minimum:
 
 ```text
-CODER_2_JOB_RELIABILITY.md
+EPUB with heavy CSS
+EPUB with images/assets
+nested TOC/navigation
+unusual spine/chapter filenames
+multilingual metadata
+very long paragraphs / segmented chunks
+UTF-8 TXT
+UTF-8 BOM TXT
+Windows-1252 TXT
+CJK TXT with Chinese/Japanese punctuation
+large book with thousands of chunks
 ```
 
-Primary ownership:
+Run representative workflows:
 
 ```text
-ebook_translator/db/**
-ebook_translator/jobs/** if created
-job/recovery/progress/lifecycle tests
+Import
+→ Research/HITL
+→ Standard translation with mocked or controlled provider
+→ Agentic translation with mocked or controlled provider
+→ interrupt/restart
+→ resume
+→ manual correction
+→ save Translation Memory
+→ QA inspection
+→ requeue failed/corrected chunk
+→ export TXT/EPUB
+→ reopen exported artifact
 ```
 
-Mission:
+Acceptance:
+
+- no lost completed chunks after restart;
+- no out-of-range resume work;
+- no paragraph mapping corruption;
+- no missing EPUB assets/TOC/package resources in source-preserving export;
+- no silent user-edit overwrite;
+- errors remain actionable rather than becoming fake completion.
+
+### 10.4 Gate 4 — Desktop Release Smoke Test
+
+For a packaged build, verify end-to-end on a clean target machine or equivalent clean environment:
 
 ```text
-Formal Job State Machine
-→ True Resume
-→ Range-safe recovery
-→ Retry/attempt metadata
-→ Per-job diagnostics foundation
+install
+launch
+backend readiness
+import local book
+translate mocked/small real sample
+inspect/edit
+export
+close app
+relaunch
+resume persisted state
+uninstall / reinstall or upgrade migration check
 ```
 
-This coder MUST NOT modify:
+Capture release evidence rather than relying on source-tree behavior.
+
+### 10.5 Gate 5 — Tag `v1.0-rc1`
+
+Create the release candidate only when Gates 1–4 pass.
+
+Before tagging:
 
 ```text
-ebook_translator/server.py
-ebook_translator/models.py
-ebook_translator/translator/**
-ebook_translator/agent/**
-frontend/**
-pyproject.toml
-requirements.txt
+backend pytest PASS
+frontend TypeScript PASS
+frontend production build PASS
+cargo check PASS
+Tauri package PASS
+corpus smoke suite PASS
+git diff --check PASS
+working tree clean except intentional local-only config
+README and MASTER_PLAN match verified behavior
 ```
 
-### 10.3 Shared / Integration-Only Files
+### 10.6 Post-RC Work — Do Not Block v1.0
 
-The two coders must not edit these files concurrently:
+After `v1.0-rc1`, prioritize product maturity in this order:
+
+1. Extract orchestration from the 1,000+ line `server.py` into explicit service modules.
+2. Add local fuzzy Translation Memory candidate ranking without a vector database.
+3. Expand long-form context with chapter summaries, entity registry, style memory, and approved examples.
+4. Expand deterministic QA conservatively: named-entity consistency, quote/structure mismatch, untranslated residue, missing/added sentence heuristics.
+5. Improve per-job observability where provider usage metadata is actually available.
+
+Explicitly deferred unless core evidence creates a need:
 
 ```text
-ebook_translator/server.py
-ebook_translator/models.py
-frontend/src/api.ts
-pyproject.toml
-requirements.txt
+Cover AI
+OCR
+audiobook generation
+chat-with-book
+vector database
+Redis/Celery/Kafka
+cloud scheduler
+additional provider breadth for its own sake
 ```
 
-When either lane requires changes in shared files, the coder must return an explicit integration contract rather than editing the shared file.
-
-Integration contract must specify:
-
-```text
-file
-required endpoint/model/method
-input
-output
-state/error semantics
-reason
-```
-
-The integration owner applies shared-file changes only after both lanes complete or reach a clean review boundary.
-
-### 10.4 Parallel Safety Rules
-
-For both coders:
-
-1. Ownership boundaries are mandatory, not advisory.
-2. Do not reset, checkout, clean, or discard unrelated working-tree changes.
-3. Do not broad-refactor outside the assigned domain.
-4. Do not commit or push unless explicitly instructed.
-5. Do not modify a shared file merely because doing so is easier locally.
-6. Add tests inside the lane's owned test scope.
-7. Report required cross-lane contracts explicitly.
-8. Full-suite failures caused by missing shared integration must be documented rather than patched by violating ownership.
-
-### 10.5 Integration Gate After Both Coders
-
-After both handoffs are returned, perform one controlled integration pass over shared files.
-
-Expected integration work may include:
-
-```text
-server.py route/service wiring
-models.py contract additions
-frontend/src/api.ts API contract updates
-shared dependency/version updates only if proven necessary
-full regression suite
-```
-
-Do not merge the two lanes by allowing both coders to independently modify orchestration hotspots.
-
-### 10.6 Required Handoff Format
-
-Each coder must return:
-
-```text
-1. What changed
-2. Files changed
-3. Tests added/updated
-4. Test results
-5. Shared contracts required
-6. Known limitations
-7. Recommended integration step
-```
-
-The two dedicated handoff files contain the complete acceptance criteria and non-goals for each lane.
+The release strategy is now **stabilize → verify → package → corpus-test → RC**, not add more features.

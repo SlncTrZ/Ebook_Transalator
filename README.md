@@ -2,24 +2,23 @@
 
 Công cụ dịch E-book local-first hướng tới một **Translation Workbench**: research, Human-in-the-Loop, translation, inspection, correction, resume và export.
 
-> **Project status:** active development. Standard translation, parser/chunker/cache, multi-vendor adapters, Research/HITL, reader và export đã có. Agentic routing, multi-vendor Agentic calls, progress state, EPUB fidelity và workflow tests vẫn đang được chuẩn hóa. Xem [`MASTER_PLAN.md`](MASTER_PLAN.md) để biết target contract và implementation order.
+> **Project status:** v1.0 candidate / internal beta. Core translation, Agentic/Standard routing, unified LLM gateway, persisted resumable jobs, deterministic QA, HITL, Translation Memory, source-preserving EPUB export, parser hardening và workbench UI đều đã triển khai và có regression coverage. Release blockers còn lại chủ yếu là frontend/native build environment, Rust/Tauri packaging verification và real-world corpus/stress testing. Xem [`MASTER_PLAN.md`](MASTER_PLAN.md) để biết release plan hiện hành.
 
 
 ## Tính năng
 
 | Tính năng | Mô tả |
 |---|---|
-| **🤖 Agentic Pipeline** | **Partial** — Research → HITL → Translate → Deterministic Validation; orchestration đang được chuẩn hóa theo Master Plan |
-| **🌐 Multi-Vendor** | Adapter layer hỗ trợ OpenAI, DeepSeek, Groq, Together, Ollama, Anthropic, Gemini; Agentic/Research chưa dùng thống nhất adapter cho mọi vendor |
-| **🎭 12 Category** | Style guide riêng cho từng thể loại (Tiên hiệp, Võ hiệp, Sci-fi, Kỳ ảo...) |
-| **📖 Song ngữ Reader** | Xem gốc/dịch song song theo chapter |
-| **📝 Glossary** | Tự động sinh từ Research Agent, chỉnh sửa thủ công |
-| **🔍 Web Search** | DuckDuckGo free — tìm metadata + category từ trang gốc |
-| **✅ HITL** | Duyệt metadata + glossary trước khi dịch |
-| **🔐 Cache** | Fingerprinting SHA-256, tránh tốn token dịch lại |
-| **🎨 AutoFormat** | Chuẩn hóa dấu câu, khoảng trắng, viết hoa, fix typo |
-| **📦 Export** | TXT + EPUB hiện hoạt động; source-EPUB fidelity (CSS/assets/TOC/spine) là target P1, chưa được coi là hoàn tất |
-| **🗑 Quản lý** | Import/Upload, xoá sách, chapter range |
+| **Agentic Pipeline** | Research → HITL → Translate → deterministic validation; Standard và Agentic đều dùng persisted job lifecycle và resumable execution |
+| **Multi-Vendor** | Unified LLM Gateway + adapter layer cho OpenAI-compatible, DeepSeek, Groq, Together, Ollama, Anthropic và Gemini |
+| **Category-aware prompts** | Standard và Agentic dùng category/style context thay vì prompt generic |
+| **Song ngữ Reader + QA** | So sánh gốc/dịch, chỉnh sửa thủ công, requeue, deterministic QA issues theo chunk |
+| **Glossary** | Book-scoped exact terminology, chỉnh sửa thủ công và inject vào prompt |
+| **Research / HITL** | Metadata research, user feedback, optional web verification và confirm trước khi dịch |
+| **Cache + Translation Memory** | Exact response cache tách biệt với user-approved Translation Memory |
+| **Crash-safe jobs** | Persisted job state, interrupted recovery, range-safe resume, attempt history và diagnostics |
+| **Export** | TXT + source-preserving EPUB; giữ CSS/assets/TOC/spine/package resources, hỗ trợ segmented paragraphs |
+| **Workbench UI** | Desktop-oriented Library → Translate → Inspect → Glossary → Export → Settings với Design Taste guardrails |
 
 ## Quick Start
 
@@ -58,21 +57,29 @@ Kiến trúc bên dưới mô tả baseline hiện tại. Target architecture v�
 
 
 ```
-frontend/          Tauri + React (TypeScript) — 5 tabs
+frontend/          Tauri + React (TypeScript) — workbench shell
 ebook_translator/
 ├── agent/          Research Agent + Translate Agent + Validator
 ├── db/             SQLite (WAL mode) + aiosqlite
 ├── parsers/        EPUB (ebooklib) + TXT (chardet + score-based)
-├── translator/     Adapter pattern (7 vendors) + Prompt Router
+├── translator/     LLM Gateway + adapters + context + QA + cache/TM
 ├── utils/          Chunker + AutoFormat + Fingerprinting
-└── export/         Rebuild .epub giữ nguyên CSS
+├── jobs/           Explicit persisted job lifecycle / resume helpers
+└── export/         Source-preserving EPUB + TXT export
 ```
 
 ## Yêu cầu
 
 - Python 3.12+
-- Node.js 20+
-- Rust (cho Tauri desktop build)
+- Node.js 22/24 stable recommended for frontend build
+- Rust + Cargo (cho Tauri desktop build)
+
+### Release verification status
+
+- Backend regression suite: **79 tests passing** at the latest verified checkpoint.
+- TypeScript compile: **passing**.
+- `npm run build`: currently blocked on the development host by missing npm optional native bindings (`rolldown` / Tauri CLI) while running an unsupported Node 26 alpha build.
+- Tauri desktop package: scaffold and Python sidecar wiring exist, but full Rust/Tauri installer verification remains a release gate.
 
 ## Project documents
 
