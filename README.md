@@ -76,7 +76,7 @@ ebook_translator/
 
 ### Release verification status
 
-- Backend regression suite: **79 tests passing** at the latest verified checkpoint.
+- Backend regression suite: **81 tests passing** at the latest verified checkpoint, including complex EPUB round-trip and 2,500-chunk resume/progress stress coverage.
 - TypeScript compile: **passing**.
 - Frontend production build: **passing under Node 22.23.2** after a clean optional-dependency install. The `/mnt/pc-dev` filesystem does not permit npm symlink creation, so local non-committed `.bin` wrappers are required on this host; application source and lockfile do not need a workaround.
 - Production npm dependency audit (`--omit=dev`): **0 vulnerabilities** at the latest verified checkpoint.

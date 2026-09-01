@@ -78,7 +78,7 @@ Rules:
 - Source-preserving EPUB export retaining non-translated archive resources, CSS/assets, package structure, spine/TOC resources, and segmented paragraph reconstruction.
 - Retry policy limited to transient network/timeout/429/5xx-style provider failures; permanent client errors fail fast.
 - Desktop-oriented workbench UI using the project-local Design Taste guardrails.
-- Backend regression suite verified at **79 passing tests**.
+- Backend regression suite verified at **81 passing tests**, including complex EPUB round-trip and 2,500-chunk resume/progress stress coverage.
 - Frontend TypeScript compile verified passing.
 
 ### Release blockers / not yet verified
@@ -566,9 +566,22 @@ Verify:
 
 Windows packaging is the first priority release target unless deployment requirements change.
 
-### 10.3 Gate 3 — Real-World Corpus and Stress Validation
+### 10.3 Gate 3 — Real-World Corpus and Stress Validation — IN PROGRESS
 
-Synthetic tests are necessary but not enough for v1.0.
+Automated release-corpus coverage now includes:
+
+```text
+complex EPUB with CSS + image asset
+nested TOC/navigation
+unusual chapter filenames
+multilingual metadata
+source-preserving export + reopen validation
+2,500-chunk progress/resume scope stress test
+```
+
+The exporter now parses source XHTML in XML-aware mode, eliminating the BeautifulSoup XML-as-HTML warning exposed by the corpus test.
+
+Synthetic/constructed corpus tests are necessary but not enough for v1.0; representative real books still need manual release validation.
 
 Create a local release corpus covering at minimum:
 

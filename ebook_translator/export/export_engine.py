@@ -134,7 +134,7 @@ async def _export_epub_preserving_source(
             if item.get_type() != ITEM_DOCUMENT:
                 continue
 
-            soup = BeautifulSoup(item.get_content(), "lxml")
+            soup = BeautifulSoup(item.get_content(), "xml")
             elements = soup.find_all(["p", "h1", "h2", "h3", "h4", "h5", "h6"])
             source_elements = [element for element in elements if element.get_text(strip=True)]
             if not source_elements:
