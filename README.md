@@ -82,7 +82,8 @@ ebook_translator/
 - Production npm dependency audit (`--omit=dev`): **0 vulnerabilities** at the latest verified checkpoint.
 - Python sidecar: build + startup/shutdown smoke test **passing**.
 - Rust stable toolchain: verified locally with `rustc 1.98.0` / `cargo 1.98.0`. Linux `cargo check` now reaches native Tauri system dependencies and is blocked by missing `glib-2.0` development libraries on this host.
-- Full Tauri installer/package verification remains a release gate, preferably on the primary Windows target environment.
+- Full Tauri installer/package verification is now explicitly assigned to the **Windows release environment**. Linux remains a development/test host and is no longer authoritative for Gate 2/4 desktop packaging.
+- See [`WINDOWS_RELEASE.md`](WINDOWS_RELEASE.md) for the Windows prerequisites, one-command build script, NSIS-first strategy, and packaged smoke-test checklist.
 
 ## Project documents
 

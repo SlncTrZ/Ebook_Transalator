@@ -535,24 +535,48 @@ npm audit --omit=dev: 0 vulnerabilities
 
 Host-specific note: `/mnt/pc-dev` does not permit npm to create symlinks, so `npm ci` must use `--no-bin-links` and local non-committed executable wrappers are needed under `node_modules/.bin` for npm scripts on this host. Do not change `package.json` or application source to encode this filesystem workaround.
 
-### 10.2 Gate 2 — Rust / Tauri Verification — IN PROGRESS
+### 10.2 Gate 2 — Windows Rust / Tauri Verification — ACTIVE RELEASE GATE
 
-Rust stable has been verified locally without system-wide installation:
+**Windows is now the authoritative desktop release environment.** Linux remains useful for backend/frontend development and automated tests, but Linux GTK/WebKit packaging is not a v1.0 blocker.
 
-```text
-rustc 1.98.0
-cargo 1.98.0
-```
-
-`cargo check` must use a Linux-native target directory such as `/tmp/ebook-tauri-target` because Rust object files built directly under `/mnt/pc-dev` are not linkable on this host. With the target directory moved to `/tmp`, compilation reaches Tauri native dependencies and currently stops because the host lacks the `glib-2.0` development package required by `glib-sys`.
-
-Next required actions:
+Authoritative runbook:
 
 ```text
-install/verify required Tauri Linux system development libraries, or run the release build on the primary Windows target environment
-cargo check --locked
-npm run desktop:build
+WINDOWS_RELEASE.md
+scripts/windows_release.ps1
 ```
+
+Required Windows baseline:
+
+```text
+Windows 10/11
+Node 22 or 24 stable
+Python 3.12+
+Rust stable MSVC host toolchain
+Microsoft C++ Build Tools — Desktop development with C++
+Microsoft Edge WebView2 Runtime
+```
+
+Primary release target:
+
+```text
+x86_64-pc-windows-msvc
+NSIS installer first
+MSI optional after NSIS passes
+```
+
+Required Gate 2 evidence:
+
+```text
+pytest PASS
+npm ci PASS
+npm run build PASS
+Windows sidecar .exe generated
+cargo check --locked PASS
+npx tauri build --bundles nsis PASS
+```
+
+The previous Linux `glib-2.0` blocker is retained only as host evidence; it no longer blocks v1.0 because Linux is not the authoritative packaging target.
 
 Verify:
 
@@ -625,9 +649,13 @@ Acceptance:
 - no silent user-edit overwrite;
 - errors remain actionable rather than becoming fake completion.
 
-### 10.4 Gate 4 — Desktop Release Smoke Test
+### 10.4 Gate 4 — Windows Packaged Desktop Smoke Test
 
-For a packaged build, verify end-to-end on a clean target machine or equivalent clean environment:
+Run this gate only against the Windows installer produced by Gate 2. Use a clean Windows 10/11 machine or clean Windows VM.
+
+Authoritative checklist lives in [`WINDOWS_RELEASE.md`](WINDOWS_RELEASE.md).
+
+Verify end-to-end:
 
 ```text
 install

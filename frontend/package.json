@@ -10,7 +10,8 @@
     "preview": "vite preview",
     "build:sidecar": "python ../scripts/build_sidecar.py",
     "desktop:dev": "npm run build:sidecar && tauri dev",
-    "desktop:build": "npm run build:sidecar && tauri build"
+    "desktop:build": "npm run build:sidecar && tauri build",
+    "desktop:build:windows": "npm run build:sidecar && tauri build --bundles nsis"
   },
   "dependencies": {
     "react": "^19.2.7",
