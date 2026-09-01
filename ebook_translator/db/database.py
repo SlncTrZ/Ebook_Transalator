@@ -10,6 +10,7 @@ from pathlib import Path
 
 import aiosqlite
 
+from ebook_translator.jobs.state import IllegalJobTransition, JobStatus, assert_job_transition
 from ebook_translator.models import Book, CacheEntry, Chunk, GlossaryEntry
 
 DB_PATH = Path.home() / ".ebook_translator" / "library.db"
@@ -66,10 +67,25 @@ CREATE TABLE IF NOT EXISTS translation_jobs (
     chapter_end INTEGER DEFAULT 99999,
     status TEXT DEFAULT 'pending',
     error_summary TEXT DEFAULT '',
+    resume_count INTEGER DEFAULT 0,
     created_at TEXT DEFAULT (datetime('now')),
     started_at TEXT,
     finished_at TEXT,
     FOREIGN KEY (book_id) REFERENCES books(id) ON DELETE CASCADE
+);
+
+CREATE TABLE IF NOT EXISTS translation_job_attempts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    job_id INTEGER NOT NULL,
+    chunk_id INTEGER NOT NULL,
+    attempt_no INTEGER NOT NULL,
+    status TEXT NOT NULL,
+    error_summary TEXT DEFAULT '',
+    started_at TEXT DEFAULT (datetime('now')),
+    finished_at TEXT,
+    FOREIGN KEY (job_id) REFERENCES translation_jobs(id) ON DELETE CASCADE,
+    FOREIGN KEY (chunk_id) REFERENCES chunks(id) ON DELETE CASCADE,
+    UNIQUE(job_id, chunk_id, attempt_no)
 );
 
 CREATE TABLE IF NOT EXISTS cache (
@@ -116,6 +132,7 @@ CREATE INDEX IF NOT EXISTS idx_translation_memory_lookup ON translation_memory(c
 CREATE INDEX IF NOT EXISTS idx_glossary_book ON glossary(book_id);
 CREATE INDEX IF NOT EXISTS idx_jobs_book ON translation_jobs(book_id, id DESC);
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON translation_jobs(status);
+CREATE INDEX IF NOT EXISTS idx_job_attempts_job ON translation_job_attempts(job_id, chunk_id, attempt_no);
 """
 
 
@@ -146,9 +163,24 @@ class Database:
             await self._connection.execute(
                 "ALTER TABLE books ADD COLUMN localized_title TEXT DEFAULT ''"
             )
+        job_columns = {
+            row["name"]
+            for row in await (
+                await self._connection.execute("PRAGMA table_info(translation_jobs)")
+            ).fetchall()
+        }
+        if "resume_count" not in job_columns:
+            await self._connection.execute(
+                "ALTER TABLE translation_jobs ADD COLUMN resume_count INTEGER DEFAULT 0"
+            )
         await self._connection.execute(
-            "UPDATE translation_jobs SET status = 'interrupted', finished_at = datetime('now'), "
+            "UPDATE translation_jobs SET status = 'interrupted', finished_at = NULL, "
             "error_summary = CASE WHEN error_summary = '' THEN 'Process restarted before completion' ELSE error_summary END "
+            "WHERE status = 'running'"
+        )
+        await self._connection.execute(
+            "UPDATE translation_job_attempts SET status = 'failed', finished_at = datetime('now'), "
+            "error_summary = CASE WHEN error_summary = '' THEN 'Process restarted during chunk attempt' ELSE error_summary END "
             "WHERE status = 'running'"
         )
         await self._connection.commit()
@@ -328,15 +360,65 @@ class Database:
             raise RuntimeError("Failed to create translation job")
         return int(cursor.lastrowid)
 
+    async def get_translation_job(self, job_id: int) -> dict | None:
+        cursor = await self.conn.execute(
+            "SELECT * FROM translation_jobs WHERE id = ?", (job_id,)
+        )
+        row = await cursor.fetchone()
+        return dict(row) if row else None
+
+    async def transition_translation_job(
+        self,
+        job_id: int,
+        target_status: str | JobStatus,
+        error_summary: str = "",
+    ) -> dict:
+        job = await self.get_translation_job(job_id)
+        if job is None:
+            raise KeyError(f"Translation job not found: {job_id}")
+
+        current = JobStatus(job["status"])
+        target = JobStatus(target_status)
+        if current == target:
+            return job
+        assert_job_transition(current, target)
+
+        if target == JobStatus.RUNNING:
+            cursor = await self.conn.execute(
+                "UPDATE translation_jobs SET status = 'running', error_summary = '', "
+                "finished_at = NULL, started_at = COALESCE(started_at, datetime('now')), "
+                "resume_count = resume_count + CASE WHEN ? IN ('interrupted', 'paused', 'failed') THEN 1 ELSE 0 END "
+                "WHERE id = ? AND status = ?",
+                (current.value, job_id, current.value),
+            )
+        elif target in {JobStatus.DONE, JobStatus.CANCELLED, JobStatus.FAILED}:
+            cursor = await self.conn.execute(
+                "UPDATE translation_jobs SET status = ?, error_summary = ?, finished_at = datetime('now') "
+                "WHERE id = ? AND status = ?",
+                (target.value, error_summary, job_id, current.value),
+            )
+        else:
+            cursor = await self.conn.execute(
+                "UPDATE translation_jobs SET status = ?, error_summary = ?, finished_at = NULL "
+                "WHERE id = ? AND status = ?",
+                (target.value, error_summary, job_id, current.value),
+            )
+
+        if cursor.rowcount != 1:
+            await self.conn.rollback()
+            raise IllegalJobTransition(
+                f"Job {job_id} changed concurrently while transitioning {current.value} -> {target.value}"
+            )
+        await self.conn.commit()
+        updated = await self.get_translation_job(job_id)
+        if updated is None:
+            raise RuntimeError(f"Translation job disappeared after transition: {job_id}")
+        return updated
+
     async def finish_translation_job(
         self, job_id: int, status: str, error_summary: str = ""
     ) -> None:
-        await self.conn.execute(
-            "UPDATE translation_jobs SET status = ?, error_summary = ?, finished_at = datetime('now') "
-            "WHERE id = ?",
-            (status, error_summary, job_id),
-        )
-        await self.conn.commit()
+        await self.transition_translation_job(job_id, status, error_summary)
 
     async def get_latest_job(self, book_id: int) -> dict | None:
         cursor = await self.conn.execute(
@@ -345,6 +427,131 @@ class Database:
         )
         row = await cursor.fetchone()
         return dict(row) if row else None
+
+    async def list_interrupted_jobs(self) -> list[dict]:
+        cursor = await self.conn.execute(
+            "SELECT * FROM translation_jobs WHERE status = 'interrupted' ORDER BY id"
+        )
+        return [dict(row) for row in await cursor.fetchall()]
+
+    async def list_resumable_jobs(self, book_id: int | None = None) -> list[dict]:
+        sql = (
+            "SELECT * FROM translation_jobs "
+            "WHERE status IN ('interrupted', 'paused', 'failed')"
+        )
+        params: list[int] = []
+        if book_id is not None:
+            sql += " AND book_id = ?"
+            params.append(book_id)
+        sql += " ORDER BY id DESC"
+        cursor = await self.conn.execute(sql, params)
+        return [dict(row) for row in await cursor.fetchall()]
+
+    async def get_latest_resumable_job(self, book_id: int) -> dict | None:
+        jobs = await self.list_resumable_jobs(book_id)
+        return jobs[0] if jobs else None
+
+    async def get_job_resume_plan(self, job_id: int) -> dict:
+        job = await self.get_translation_job(job_id)
+        if job is None:
+            raise KeyError(f"Translation job not found: {job_id}")
+        if job["status"] not in {
+            JobStatus.INTERRUPTED.value,
+            JobStatus.PAUSED.value,
+            JobStatus.FAILED.value,
+        }:
+            raise IllegalJobTransition(
+                f"Job {job_id} in state {job['status']!r} is not resumable"
+            )
+
+        sql = (
+            "SELECT * FROM chunks WHERE book_id = ? "
+            "AND status IN ('pending', 'failed')"
+        )
+        params: list[int] = [job["book_id"]]
+        if job["chapter_end"] < 99999 or job["chapter_start"] > 0:
+            sql += " AND chapter_idx + 1 >= ? AND chapter_idx + 1 <= ?"
+            params.extend([max(1, job["chapter_start"]), job["chapter_end"]])
+        sql += " ORDER BY chapter_idx, paragraph_idx"
+        cursor = await self.conn.execute(sql, params)
+        remaining = [Chunk(**dict(row)) for row in await cursor.fetchall()]
+        progress = await self.get_chunk_progress(
+            job["book_id"], job["chapter_start"], job["chapter_end"]
+        )
+        return {
+            "job": job,
+            "remaining_chunks": remaining,
+            "progress": progress,
+        }
+
+    async def resume_translation_job(self, job_id: int) -> dict:
+        plan = await self.get_job_resume_plan(job_id)
+        updated = await self.transition_translation_job(job_id, JobStatus.RUNNING)
+        return {**plan, "job": updated}
+
+    async def start_job_chunk_attempt(self, job_id: int, chunk_id: int) -> int:
+        cursor = await self.conn.execute(
+            "SELECT COALESCE(MAX(attempt_no), 0) + 1 AS next_attempt "
+            "FROM translation_job_attempts WHERE job_id = ? AND chunk_id = ?",
+            (job_id, chunk_id),
+        )
+        row = await cursor.fetchone()
+        attempt_no = int(row["next_attempt"] if row else 1)
+        inserted = await self.conn.execute(
+            "INSERT INTO translation_job_attempts "
+            "(job_id, chunk_id, attempt_no, status) VALUES (?, ?, ?, 'running')",
+            (job_id, chunk_id, attempt_no),
+        )
+        await self.conn.commit()
+        if inserted.lastrowid is None:
+            raise RuntimeError("Failed to create job chunk attempt")
+        return int(inserted.lastrowid)
+
+    async def finish_job_chunk_attempt(
+        self, attempt_id: int, status: str, error_summary: str = ""
+    ) -> None:
+        if status not in {"done", "failed", "cancelled"}:
+            raise ValueError(f"Invalid attempt terminal status: {status}")
+        await self.conn.execute(
+            "UPDATE translation_job_attempts SET status = ?, error_summary = ?, "
+            "finished_at = datetime('now') WHERE id = ?",
+            (status, error_summary, attempt_id),
+        )
+        await self.conn.commit()
+
+    async def get_job_attempt_summary(self, job_id: int) -> dict[str, int]:
+        cursor = await self.conn.execute(
+            "SELECT COUNT(*) AS attempts, "
+            "SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END) AS done_attempts, "
+            "SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) AS failed_attempts "
+            "FROM translation_job_attempts WHERE job_id = ?",
+            (job_id,),
+        )
+        row = await cursor.fetchone()
+        return {
+            "attempts": int(row["attempts"] or 0),
+            "done_attempts": int(row["done_attempts"] or 0),
+            "failed_attempts": int(row["failed_attempts"] or 0),
+        }
+
+    async def get_job_diagnostics(self, job_id: int) -> dict:
+        job = await self.get_translation_job(job_id)
+        if job is None:
+            raise KeyError(f"Translation job not found: {job_id}")
+        progress = await self.get_chunk_progress(
+            job["book_id"], job["chapter_start"], job["chapter_end"]
+        )
+        attempts = await self.get_job_attempt_summary(job_id)
+        return {
+            "job_id": job_id,
+            "status": job["status"],
+            "resume_count": int(job["resume_count"] or 0),
+            "total": int(progress["total"]),
+            "done": int(progress["done"]),
+            "failed": int(progress["failed"]),
+            "pending": int(progress["pending"]),
+            **attempts,
+        }
 
     async def get_diagnostics(self) -> dict[str, int]:
         cursor = await self.conn.execute(

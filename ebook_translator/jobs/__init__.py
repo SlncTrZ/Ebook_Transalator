@@ -1,0 +1,1 @@
+"""Translation job domain helpers."""

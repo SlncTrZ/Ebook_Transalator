@@ -105,6 +105,11 @@ class StartTranslateRequest(BaseModel):
     agentic: bool = False
 
 
+class ResumeJobRequest(BaseModel):
+    api_key: str = ""
+    base_url: str = ""
+
+
 class ConfirmMetadataRequest(BaseModel):
     title: str = ""
     author: str = ""
@@ -618,7 +623,7 @@ async def start_translate(req: StartTranslateRequest) -> dict:
     global active_pipeline, active_book_id, active_job_id, _cancel_event
     d = _get_db()
 
-    if active_pipeline:
+    if active_job_id is not None:
         _cancel_event.set()
         await asyncio.sleep(0.5)
     _cancel_event.clear()
@@ -717,13 +722,20 @@ async def _run_translation(
                 logger.info("Translation cancelled for book %d", book_id)
                 break
 
+            attempt_id: int | None = None
             try:
+                if job_id is not None and chunk.id is not None:
+                    attempt_id = await d.start_job_chunk_attempt(job_id, chunk.id)
                 translated = await pipeline.translate_chunk(chunk, glossary)
                 if chunk.id is not None:
                     await d.update_chunk_result(chunk.id, translated, "done")
+                if attempt_id is not None:
+                    await d.finish_job_chunk_attempt(attempt_id, "done")
             except Exception as e:
                 if chunk.id is not None:
                     await d.mark_chunk_failed(chunk.id, str(e))
+                if attempt_id is not None:
+                    await d.finish_job_chunk_attempt(attempt_id, "failed", str(e)[:500])
 
         await d.update_book_status(book_id)
         if job_id is not None:
@@ -766,9 +778,9 @@ async def translate_agentic(req: StartTranslateRequest) -> dict:
     global active_pipeline, active_book_id, active_job_id, _cancel_event
     d = _get_db()
 
-    if active_pipeline:
+    if active_job_id is not None:
         _cancel_event.set()
-    await asyncio.sleep(0.5)
+        await asyncio.sleep(0.5)
     _cancel_event.clear()
 
     api_key = (
@@ -852,15 +864,22 @@ async def _run_agentic_translate(
         for chunk in pending:
             if _cancel_event.is_set():
                 break
+            attempt_id: int | None = None
             try:
+                if job_id is not None and chunk.id is not None:
+                    attempt_id = await d.start_job_chunk_attempt(job_id, chunk.id)
                 translated = await translate_agent_with_validation(
                     chunk, glossary, ctx, d
                 )
                 if chunk.id is not None:
                     await d.update_chunk_result(chunk.id, translated, "done")
+                if attempt_id is not None:
+                    await d.finish_job_chunk_attempt(attempt_id, "done")
             except Exception as e:
                 if chunk.id is not None:
                     await d.mark_chunk_failed(chunk.id, str(e))
+                if attempt_id is not None:
+                    await d.finish_job_chunk_attempt(attempt_id, "failed", str(e)[:500])
 
         await d.update_book_status(book_id)
         if job_id is not None:
@@ -964,6 +983,129 @@ async def latest_translation_job(book_id: int) -> dict:
     if job is None:
         raise HTTPException(status_code=404, detail="No translation job found")
     return job
+
+
+@app.get("/api/jobs/{job_id}/resume-plan")
+async def job_resume_plan(job_id: int) -> dict:
+    try:
+        plan = await _get_db().get_job_resume_plan(job_id)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
+    return {
+        "job": plan["job"],
+        "progress": plan["progress"],
+        "remaining_chunk_ids": [chunk.id for chunk in plan["remaining_chunks"]],
+    }
+
+
+@app.post("/api/jobs/{job_id}/resume")
+async def resume_translation_job(job_id: int, req: ResumeJobRequest) -> dict:
+    global active_pipeline, active_book_id, active_job_id, _cancel_event
+
+    if active_job_id is not None:
+        raise HTTPException(status_code=409, detail="Another translation job is active")
+
+    d = _get_db()
+    try:
+        plan = await d.get_job_resume_plan(job_id)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
+    except ValueError as e:
+        raise HTTPException(status_code=409, detail=str(e)) from e
+
+    job = plan["job"]
+    book = await d.get_book(job["book_id"])
+    if book is None:
+        raise HTTPException(status_code=404, detail="Book not found")
+
+    from ebook_translator.translator.adapters import VENDORS
+
+    vendor_info = VENDORS.get(job["vendor"])
+    api_key = (
+        req.api_key
+        or os.environ.get("OPENAI_API_KEY", "")
+        or os.environ.get("API_KEY", "")
+    )
+    if not api_key and (vendor_info is None or vendor_info.requires_api_key):
+        raise HTTPException(
+            status_code=400,
+            detail="API key required to resume this provider; credentials are not persisted",
+        )
+
+    base_url = req.base_url or (vendor_info.base_url if vendor_info else "")
+    _cancel_event.clear()
+    active_book_id = book.id
+    active_job_id = job_id
+
+    await d.resume_translation_job(job_id)
+
+    if job["mode"] == "standard":
+        config = TranslationConfig(
+            vendor=job["vendor"],
+            api_key=api_key,
+            model=job["model"],
+            base_url=base_url,
+            source_lang=book.source_lang,
+            target_lang=book.target_lang,
+            category=book.category,
+        )
+        active_pipeline = TranslationPipeline(d, config)
+        asyncio.create_task(
+            _run_translation(
+                book.id,
+                job_id,
+                job["chapter_start"],
+                job["chapter_end"],
+            )
+        )
+    elif job["mode"] == "agentic":
+        from ebook_translator.agent.pipeline import AgentContext
+
+        ctx = AgentContext(
+            book_id=book.id,
+            vendor=job["vendor"],
+            api_key=api_key,
+            model=job["model"],
+            source_lang=book.source_lang,
+            target_lang=book.target_lang,
+            category=book.category,
+            base_url=base_url,
+            title=book.title,
+            author=book.author,
+        )
+        active_pipeline = None
+        asyncio.create_task(
+            _run_agentic_translate(
+                d,
+                book.id,
+                ctx,
+                job["chapter_start"],
+                job["chapter_end"],
+                job_id,
+            )
+        )
+    else:
+        active_job_id = None
+        active_book_id = None
+        raise HTTPException(status_code=409, detail=f"Unsupported job mode: {job['mode']}")
+
+    return {
+        "job_id": job_id,
+        "book_id": book.id,
+        "status": "running",
+        "mode": job["mode"],
+        "remaining": len(plan["remaining_chunks"]),
+    }
+
+
+@app.get("/api/jobs/{job_id}/diagnostics")
+async def job_diagnostics(job_id: int) -> dict:
+    try:
+        return await _get_db().get_job_diagnostics(job_id)
+    except KeyError as e:
+        raise HTTPException(status_code=404, detail=str(e)) from e
 
 
 @app.get("/api/diagnostics")
