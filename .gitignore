@@ -34,6 +34,8 @@ Thumbs.db
 .env.*.local
 
 # Project specific
+.local/
+.pi/
 *.db
 *.db-journal
 *.db-wal
