@@ -12,7 +12,7 @@ import json
 import logging
 from dataclasses import dataclass, field
 
-import httpx
+from ebook_translator.translator.gateway import LLMConfig, LLMGateway
 
 logger = logging.getLogger(__name__)
 
@@ -89,7 +89,8 @@ async def extract_metadata(
     preview: str,
     api_key: str,
     model: str = "gpt-4o-mini",
-    base_url: str = "https://api.openai.com/v1",
+    base_url: str = "",
+    vendor: str = "openai",
     user_feedback: str = "",
     force_search: bool = False,
 ) -> MetadataResult:
@@ -117,23 +118,14 @@ async def extract_metadata(
         {"role": "user", "content": user},
     ]
 
-    async with httpx.AsyncClient(timeout=30) as client:
-        resp = await client.post(
-            f"{base_url}/chat/completions",
-            headers={
-                "Authorization": f"Bearer {api_key}",
-                "Content-Type": "application/json",
-            },
-            json={
-                "model": model,
-                "messages": messages,
-                "temperature": 0.1,
-                "response_format": {"type": "json_object"},
-            },
-        )
-        resp.raise_for_status()
-        data = resp.json()
-        content_text = data["choices"][0]["message"]["content"]
+    gateway = LLMGateway(
+        LLMConfig(vendor=vendor, api_key=api_key, model=model, base_url=base_url)
+    )
+    content_text = await gateway.generate(
+        messages,
+        temperature=0.1,
+        response_format={"type": "json_object"},
+    )
 
     try:
         parsed = json.loads(content_text)
@@ -172,27 +164,15 @@ async def extract_metadata(
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": user2},
             ]
-            async with httpx.AsyncClient(timeout=30) as client:
-                resp2 = await client.post(
-                    f"{base_url}/chat/completions",
-                    headers={
-                        "Authorization": f"Bearer {api_key}",
-                        "Content-Type": "application/json",
-                    },
-                    json={
-                        "model": model,
-                        "messages": messages2,
-                        "temperature": 0.1,
-                        "response_format": {"type": "json_object"},
-                    },
-                )
-                resp2.raise_for_status()
-                data2 = resp2.json()
-                content_text = data2["choices"][0]["message"]["content"]
-                try:
-                    parsed = json.loads(content_text)
-                except json.JSONDecodeError:
-                    pass  # giữ kết quả cũ
+            content_text = await gateway.generate(
+                messages2,
+                temperature=0.1,
+                response_format={"type": "json_object"},
+            )
+            try:
+                parsed = json.loads(content_text)
+            except json.JSONDecodeError:
+                pass  # giữ kết quả cũ
 
     sources = [r.get("url", "") for r in search_results] if search_results else []
     return MetadataResult(

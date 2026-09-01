@@ -1,13 +1,15 @@
-# Kế hoạch Triển khai: Ebook Translator (Audit v2 — Ngon-Bổ-Rẻ)
+# Kế hoạch Triển khai: Ebook Translator (Historical Plan)
 
-## Mục tiêu
+> Tài liệu này là kế hoạch lịch sử ban đầu và được giữ để truy vết quyết định. **Không dùng file này làm roadmap điều hành hiện tại.** Roadmap, target architecture, acceptance gates và junior guardrails nằm trong [`MASTER_PLAN.md`](MASTER_PLAN.md).
+
+## Mục tiêu ban đầu
 
 Xây dựng công cụ dịch E-book tự động, bản địa hóa, cá nhân hóa văn phong, đồng nhất thuật ngữ.
 **Nguyên tắc:** Lõi trước — bề nổi sau. Cache từ Ngày 1. Error recovery bắt buộc.
 
 ---
 
-## Phase 1 (MVP — 2 Tuần): Translation Core
+## Phase 1 (Historical): Translation Core
 
 **Trọng tâm:** Parse → Chunk → Dịch → Ghép → Xuất. Prompt chay, chưa cần UI.
 
@@ -25,7 +27,7 @@ Xây dựng công cụ dịch E-book tự động, bản địa hóa, cá nhân 
 
 ---
 
-## Phase 2 (1 Tuần): Tauri UI + Prompt Routing
+## Phase 2 (Historical): Tauri UI + Prompt Routing
 
 **Trọng tâm:** Có giao diện, có phân luồng văn phong, có thanh tiến độ.
 
@@ -42,7 +44,7 @@ Xây dựng công cụ dịch E-book tự động, bản địa hóa, cá nhân 
 
 ---
 
-## Phase 3 (Tùy chọn 1): Web Search Agent + HITL
+## Phase 3 (Historical): Web Search Agent + HITL
 
 **Trọng tâm:** AI tự tìm metadata + anh duyệt.
 
@@ -52,7 +54,7 @@ Xây dựng công cụ dịch E-book tự động, bản địa hóa, cá nhân 
 
 ---
 
-## Phase 4 (Tùy chọn 2): Cover Generator
+## Phase 4 (Historical / Deferred): Cover Generator
 
 **Trọng tâm:** Sinh ảnh bìa tự động.
 
@@ -62,7 +64,10 @@ Xây dựng công cụ dịch E-book tự động, bản địa hóa, cá nhân 
 
 ---
 
-## 🔥 Kỹ thuật xương sống (xuyên suốt)
+## Kỹ thuật xương sống (giữ lại)
+
+Các nguyên tắc cache, retry, resume và token budget dưới đây vẫn có giá trị, nhưng implementation priority và Definition of Done hiện do `MASTER_PLAN.md` quản lý.
+
 
 | Kỹ thuật | Mô tả | Áp dụng từ |
 |---|---|---|

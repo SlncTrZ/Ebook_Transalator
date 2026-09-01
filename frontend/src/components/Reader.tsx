@@ -1,6 +1,11 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 import type { ReaderChunk } from "../api";
-import { getReaderChunks } from "../api";
+import {
+	getReaderChunks,
+	rememberChunkTranslation,
+	requeueChunk,
+	updateChunkTranslation,
+} from "../api";
 
 interface ReaderProps {
 	bookId: number | null;
@@ -9,172 +14,134 @@ interface ReaderProps {
 export function Reader({ bookId }: ReaderProps) {
 	const [chunks, setChunks] = useState<ReaderChunk[]>([]);
 	const [loading, setLoading] = useState(false);
+	const [error, setError] = useState<string | null>(null);
 	const [chapterStart, setChapterStart] = useState(1);
 	const [chapterEnd, setChapterEnd] = useState(5);
 	const [statusFilter, setStatusFilter] = useState("all");
+	const [drafts, setDrafts] = useState<Record<number, string>>({});
 
 	const load = async () => {
 		if (!bookId) return;
 		setLoading(true);
+		setError(null);
 		try {
-			const data = await getReaderChunks(
-				bookId,
-				chapterStart,
-				chapterEnd,
-				statusFilter,
-			);
+			const data = await getReaderChunks(bookId, chapterStart, chapterEnd, statusFilter);
 			setChunks(data.chunks);
-		} catch (e) {
-			console.error("Reader load failed", e);
+			setDrafts(
+				Object.fromEntries(
+					data.chunks.map((chunk) => [chunk.id, chunk.translated_text ?? ""]),
+				),
+			);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : String(err));
+		} finally {
+			setLoading(false);
 		}
-		setLoading(false);
 	};
 
 	useEffect(() => {
-		if (bookId) load();
+		if (bookId) void load();
 		else setChunks([]);
 	}, [bookId]);
 
-	// Group by chapter
 	const byChapter: Record<number, ReaderChunk[]> = {};
-	for (const c of chunks) {
-		(byChapter[c.chapter_idx] ??= []).push(c);
-	}
-	const chapterIdxs = Object.keys(byChapter)
-		.map(Number)
-		.sort((a, b) => a - b);
+	for (const chunk of chunks) (byChapter[chunk.chapter_idx] ??= []).push(chunk);
+	const chapterIndexes = Object.keys(byChapter).map(Number).sort((a, b) => a - b);
 
 	if (!bookId) {
-		return (
-			<div className="reader">
-				<h2>📖 Reader</h2>
-				<p className="muted">Chọn sách từ Library để đọc song ngữ.</p>
-			</div>
-		);
+		return <p className="muted">Select a book in Library to inspect its translation.</p>;
 	}
 
 	return (
 		<div className="reader">
-			<h2>📖 Reader</h2>
-
-			<div
-				className="reader-controls"
-				style={{
-					display: "flex",
-					gap: 10,
-					alignItems: "center",
-					marginBottom: 16,
-					flexWrap: "wrap",
-				}}
-			>
-				<label style={{ fontSize: 13, color: "#8b949e" }}>
-					Chapter:
+			<div className="reader-controls">
+				<label>
+					From
 					<input
 						type="number"
 						min={1}
 						value={chapterStart}
-						onChange={(e) =>
-							setChapterStart(Math.max(1, parseInt(e.target.value) || 1))
-						}
-						style={{ width: 50, marginLeft: 4 }}
+						onChange={(event) => setChapterStart(Math.max(1, Number(event.target.value) || 1))}
 					/>
-					→
+				</label>
+				<label>
+					To
 					<input
 						type="number"
 						min={1}
 						value={chapterEnd >= 99999 ? "" : chapterEnd}
 						placeholder="end"
-						onChange={(e) =>
-							setChapterEnd(e.target.value ? parseInt(e.target.value) : 99999)
-						}
-						style={{ width: 50 }}
+						onChange={(event) => setChapterEnd(event.target.value ? Number(event.target.value) : 99999)}
 					/>
 				</label>
-				<select
-					value={statusFilter}
-					onChange={(e) => setStatusFilter(e.target.value)}
-				>
-					<option value="all">Tất cả</option>
-					<option value="done">Đã dịch</option>
-					<option value="pending">Chưa dịch</option>
-					<option value="failed">Lỗi</option>
+				<select value={statusFilter} onChange={(event) => setStatusFilter(event.target.value)}>
+					<option value="all">All states</option>
+					<option value="done">Translated</option>
+					<option value="pending">Pending</option>
+					<option value="failed">Failed</option>
 				</select>
-				<button onClick={load} disabled={loading}>
-					🔄 Load
+				<button onClick={() => void load()} disabled={loading}>
+					{loading ? "Loading…" : "Refresh"}
 				</button>
 			</div>
 
-			{loading ? (
-				<p className="muted">Đang tải...</p>
-			) : chunks.length === 0 ? (
-				<p className="muted">
-					Không có dữ liệu. Chọn chapter range và bấm Load.
-				</p>
-			) : (
-				<div className="reader-content">
-					{chapterIdxs.map((chIdx) => (
-						<div key={chIdx} className="chapter-block">
-							<h3
-								style={{
-									color: "#58a6ff",
-									fontSize: 15,
-									margin: "16px 0 8px",
-									paddingBottom: 4,
-									borderBottom: "1px solid #30363d",
-								}}
-							>
-								Chapter {chIdx + 1}
-							</h3>
-							{byChapter[chIdx].map((chunk) => (
-								<div
-									key={chunk.id}
-									className="bilingual-pair"
-									style={{
-										marginBottom: 12,
-										padding: 12,
-										background: "#0d1117",
-										borderRadius: 6,
-										border: "1px solid #21262d",
-									}}
-								>
-									<div
-										className="original-text"
-										style={{
-											fontSize: 13,
-											color: "#8b949e",
-											lineHeight: 1.7,
-											marginBottom: 8,
-											padding: 8,
-											background: "#161b22",
-											borderRadius: 4,
-										}}
-									>
-										{chunk.original_text}
-									</div>
-									<div
-										className="translated-text"
-										style={{
-											fontSize: 14,
-											color: chunk.translated_text ? "#e1e4e8" : "#f85149",
-											lineHeight: 1.7,
-										}}
-									>
-										{chunk.translated_text || (
-											<span className="muted">
-												{chunk.status === "pending"
-													? "⏳ Chưa dịch"
-													: chunk.status === "failed"
-														? "❌ Lỗi"
-														: "—"}
-											</span>
-										)}
+			{error && <div className="error-banner">{error}</div>}
+			{!loading && chunks.length === 0 && (
+				<p className="muted">No chunks match this chapter range and status filter.</p>
+			)}
+
+			<div className="reader-content">
+				{chapterIndexes.map((chapterIndex) => (
+					<section key={chapterIndex} className="chapter-block">
+						<h3>Chapter {chapterIndex + 1}</h3>
+						{byChapter[chapterIndex].map((chunk) => (
+							<div key={chunk.id} className="bilingual-pair">
+								<div className="original-text">{chunk.original_text}</div>
+								<div className="translated-text">
+									<textarea
+										className="translation-editor"
+										value={drafts[chunk.id] ?? ""}
+										placeholder={chunk.status === "failed" ? "Translation failed" : "Pending translation"}
+										onChange={(event) =>
+											setDrafts((current) => ({ ...current, [chunk.id]: event.target.value }))
+										}
+									/>
+									<div className="chunk-actions">
+										<button
+											className="btn-small"
+											disabled={!(drafts[chunk.id] ?? "").trim()}
+											onClick={async () => {
+												await updateChunkTranslation(chunk.id, drafts[chunk.id] ?? "");
+												await load();
+											}}
+										>
+											Save correction
+										</button>
+										<button
+											className="btn-small"
+											disabled={!(drafts[chunk.id] ?? "").trim()}
+											onClick={async () => {
+												await rememberChunkTranslation(chunk.id, drafts[chunk.id] ?? "");
+											}}
+										>
+											Save to memory
+										</button>
+										<button
+											className="btn-small"
+											onClick={async () => {
+												await requeueChunk(chunk.id);
+												await load();
+											}}
+										>
+											Requeue
+										</button>
 									</div>
 								</div>
-							))}
-						</div>
-					))}
-				</div>
-			)}
+							</div>
+						))}
+					</section>
+				))}
+			</div>
 		</div>
 	);
 }

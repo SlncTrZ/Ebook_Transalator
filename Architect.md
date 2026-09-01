@@ -1,6 +1,20 @@
-# Kiến trúc Hệ thống: Ebook Translator (Audit v2)
+# Kiến trúc Hệ thống: Ebook Translator
 
-## Sơ đồ Luồng (Flow Diagram — MVP Phase 1)
+> Tài liệu này mô tả **target architecture** và migration direction. Trạng thái implementation thực tế phải được đối chiếu với `README.md` và `MASTER_PLAN.md`. Nếu có xung đột, `MASTER_PLAN.md` là source of truth.
+
+## Current → Target Gap (2026-08-31)
+
+| Area | Current | Target |
+|---|---|---|
+| LLM calls | Standard dùng adapter; Agentic/Research còn gọi OpenAI-compatible HTTP trực tiếp | Một LLM Gateway duy nhất cho mọi workflow |
+| Orchestration | FastAPI `server.py` đang giữ nhiều workflow logic | Service/orchestration layer tách khỏi transport |
+| Progress | books counters + chunk COUNT + AgentContext cùng tồn tại | Một canonical job/chunk state model |
+| Agentic routing | Frontend/backend contract còn lệch | Explicit Standard/Agentic job commands |
+| EPUB export | Rebuild EPUB mới từ translated chunks | Preserve source spine/TOC/CSS/assets/metadata |
+| Recovery | Cache/resume theo chunk có nền tảng, background crash recovery chưa đầy đủ | Crash-safe persisted job recovery |
+| UI | Nhiều tab CRUD/flow rời rạc | Translation Workbench: navigator + bilingual workspace + inspector |
+
+## Sơ đồ Luồng (Target Core)
 
 ```
 [Input File] → [Parser] → [Chunker] → [Cache Check] ──→ [AI Translate] → [Writer] → [Export]
@@ -13,7 +27,7 @@
               → báo lỗi
 ```
 
-## Cấu trúc Layer (Sau Audit)
+## Cấu trúc Layer (Target)
 
 ### 1. Data Layer (SQLite — WAL mode)
 
@@ -37,6 +51,9 @@ cache:    id, content_hash, source_lang, target_lang, model, translated_text, cr
 - **Hash:** `sha256(original_text.encode())` — dùng làm key tra cache
 
 ### 3. Translation Pipeline
+
+Target constraint: mọi model call phải đi qua `LLM Gateway → Vendor Adapter`. Agent modules không được tự ghép provider URL hoặc hard-code `/chat/completions`.
+
 
 ```python
 async def translate_chunk(chunk, glossary, category):
@@ -71,6 +88,9 @@ async def translate_chunk(chunk, glossary, category):
 
 ### 4. Error Recovery
 
+Current implementation mới đạt một phần target này. Đặc biệt, process/background-task crash recovery và reconciliation của job state vẫn là hạng mục P1/P2 trong `MASTER_PLAN.md`.
+
+
 | Loại lỗi | Hành vi |
 |---|---|
 | **429 Rate Limit** | Backoff 1s → 4s → 16s. Sau 3 lần → skip + log |
@@ -81,6 +101,9 @@ async def translate_chunk(chunk, glossary, category):
 | **Mất điện giữa chừng** | Chạy lại → check DB: chunk `done` → skip. Chỉ dịch `pending` + `failed` |
 
 ### 5. Caching Policy (Fingerprinting)
+
+Exact-response cache hiện tại là nền tảng, nhưng target architecture tách rõ **cache**, **translation memory**, **glossary**, và **manual correction**; không được gộp các semantic khác nhau chỉ vì cùng giúp tái sử dụng bản dịch.
+
 
 ```
 Key:   sha256(original_text + source_lang + target_lang + model)
@@ -94,7 +117,10 @@ Scope: Per-book? Không — global. Cùng 1 paragraph ở 2 cuốn sách khác n
 
 ---
 
-## Tech Stack (Chốt)
+## Tech Stack
+
+Tech stack hiện tại được giữ theo nguyên tắc reuse-first. Không thêm Redis/Celery/Kafka/cloud database nếu chưa có bằng chứng SQLite/local orchestration không đáp ứng Scalability thực tế của desktop workload.
+
 
 | Layer | Công nghệ | Lý do |
 |---|---|---|
@@ -104,12 +130,24 @@ Scope: Per-book? Không — global. Cùng 1 paragraph ở 2 cuốn sách khác n
 | **Parser TXT** | chardet | Auto-detect encoding |
 | **AI Client** | httpx (async) + tenacity | Async call + retry pattern |
 | **Cache** | hash (sha256) + bảng SQLite | Không cần Redis, đủ nhanh cho local |
-| **Export** | ebooklib | Re-build .epub giữ nguyên CSS |
-| **Frontend (P2)** | Tauri 2.x + React (TS) | Desktop app ~5MB, không cần Electron nặng |
+| **Export** | ebooklib | Current: TXT + generated EPUB; Target P1: preserve source EPUB spine/TOC/CSS/assets/metadata |
+| **Frontend** | Tauri 2.x + React (TS) | Desktop workbench; packaging vẫn chưa hoàn tất |
 | **Error Handling** | tenacity + logging | Retry exponential backoff |
 | **Token Tracking** | tiktoken (OpenAI) | Đếm token trước khi gửi, tránh oversize |
 
 ---
+
+## UI Architecture Target
+
+Core product surface không được trở thành SaaS dashboard/card soup. Target là desktop workbench:
+
+```text
+Book Navigator | Original / Translation Workspace | Inspector
+---------------------------------------------------------------
+Job status · model · cache hits · tokens · latency · errors
+```
+
+Design implementation phải đọc `.agents/skills/design-taste-frontend/SKILL.md`, nhưng project-specific workflow rules trong `MASTER_PLAN.md` override các decorative/landing-page biases của skill.
 
 ## So sánh trước và sau Audit
 

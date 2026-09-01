@@ -94,7 +94,13 @@ class BaseAdapter(ABC):
         self.base_url = base_url
 
     @abstractmethod
-    async def translate(self, messages: list[dict]) -> str: ...
+    async def translate(
+        self,
+        messages: list[dict],
+        *,
+        temperature: float = 0.3,
+        response_format: dict | None = None,
+    ) -> str: ...
 
     @abstractmethod
     async def fetch_models(self) -> list[str]:
@@ -108,18 +114,27 @@ class BaseAdapter(ABC):
 class OpenAICompatibleAdapter(BaseAdapter):
     """Dùng chung cho mọi vendor OpenAI-compatible."""
 
-    async def translate(self, messages: list[dict]) -> str:
+    async def translate(
+        self,
+        messages: list[dict],
+        *,
+        temperature: float = 0.3,
+        response_format: dict | None = None,
+    ) -> str:
         import httpx
 
         async with httpx.AsyncClient(timeout=120) as client:
+            payload = {
+                "model": self.model,
+                "messages": messages,
+                "temperature": temperature,
+            }
+            if response_format:
+                payload["response_format"] = response_format
             resp = await client.post(
                 f"{self.base_url}/chat/completions",
                 headers=self._headers(),
-                json={
-                    "model": self.model,
-                    "messages": messages,
-                    "temperature": 0.3,
-                },
+                json=payload,
             )
             resp.raise_for_status()
             data = resp.json()
@@ -174,7 +189,13 @@ class OpenAICompatibleAdapter(BaseAdapter):
 class OllamaAdapter(BaseAdapter):
     """Adapter rieng cho Ollama (API local, format khac)."""
 
-    async def translate(self, messages: list[dict]) -> str:
+    async def translate(
+        self,
+        messages: list[dict],
+        *,
+        temperature: float = 0.3,
+        response_format: dict | None = None,
+    ) -> str:
         import httpx
 
         # Chuyen doi messages -> Ollama prompt format
@@ -196,7 +217,7 @@ class OllamaAdapter(BaseAdapter):
                     "model": self.model,
                     "prompt": prompt,
                     "stream": False,
-                    "options": {"temperature": 0.3},
+                    "options": {"temperature": temperature},
                 },
             )
             resp.raise_for_status()
@@ -232,7 +253,13 @@ class AnthropicAdapter(BaseAdapter):
         "claude-3-5-haiku-20241022",
     ]
 
-    async def translate(self, messages: list[dict]) -> str:
+    async def translate(
+        self,
+        messages: list[dict],
+        *,
+        temperature: float = 0.3,
+        response_format: dict | None = None,
+    ) -> str:
         import httpx
 
         system = ""
@@ -243,7 +270,12 @@ class AnthropicAdapter(BaseAdapter):
             else:
                 chat_messages.append({"role": msg["role"], "content": msg["content"]})
 
-        payload = {"model": self.model, "max_tokens": 4096, "messages": chat_messages}
+        payload = {
+            "model": self.model,
+            "max_tokens": 4096,
+            "messages": chat_messages,
+            "temperature": temperature,
+        }
         if system:
             payload["system"] = system
 
@@ -271,7 +303,13 @@ class AnthropicAdapter(BaseAdapter):
 class GeminiAdapter(BaseAdapter):
     """Adapter rieng cho Google Gemini API."""
 
-    async def translate(self, messages: list[dict]) -> str:
+    async def translate(
+        self,
+        messages: list[dict],
+        *,
+        temperature: float = 0.3,
+        response_format: dict | None = None,
+    ) -> str:
         import httpx
 
         system = ""
@@ -285,7 +323,7 @@ class GeminiAdapter(BaseAdapter):
 
         payload = {
             "contents": contents,
-            "generationConfig": {"temperature": 0.3, "maxOutputTokens": 4096},
+            "generationConfig": {"temperature": temperature, "maxOutputTokens": 4096},
         }
         if system:
             payload["system_instruction"] = {"parts": [{"text": system}]}

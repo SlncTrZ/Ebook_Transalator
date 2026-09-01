@@ -17,7 +17,13 @@ from tenacity import (
 
 from ebook_translator.db.database import Database
 from ebook_translator.models import CacheEntry, Chunk, GlossaryEntry
-from ebook_translator.translator.adapters import VENDORS, create_adapter
+from ebook_translator.translator.adapters import VENDORS
+from ebook_translator.translator.cache_key import prompt_fingerprint
+from ebook_translator.translator.gateway import LLMConfig, LLMGateway
+from ebook_translator.translator.metrics import (
+    record_cache_hit,
+    record_translation_memory_hit,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -70,11 +76,13 @@ class TranslationPipeline:
     def __init__(self, db: Database, config: TranslationConfig) -> None:
         self._db = db
         self._config = config
-        self._adapter = create_adapter(
-            vendor_id=config.vendor,
-            api_key=config.api_key,
-            model=config.model,
-            base_url=config.base_url,
+        self._gateway = LLMGateway(
+            LLMConfig(
+                vendor=config.vendor,
+                api_key=config.api_key,
+                model=config.model,
+                base_url=config.base_url,
+            )
         )
 
     async def close(self) -> None:
@@ -104,25 +112,37 @@ class TranslationPipeline:
         ]
 
     async def _call_api(self, messages: list[dict]) -> str:
-        """Goi API qua adapter (vendor-agnostic)."""
-        return await self._adapter.translate(messages)
+        """Generate through the unified LLM gateway."""
+        return await self._gateway.generate(messages, temperature=0.3)
 
     async def translate_chunk(self, chunk: Chunk, glossary: list[GlossaryEntry]) -> str:
         """Translate one chunk: cache check -> API call with retry -> save cache."""
 
-        # Step 1: Cache check
+        # Step 1: user-approved translation memory outranks model cache.
+        remembered = await self._db.get_translation_memory(
+            chunk.content_hash,
+            self._config.source_lang,
+            self._config.target_lang,
+        )
+        if remembered is not None:
+            record_translation_memory_hit()
+            logger.info("Translation Memory HIT for hash=%s", chunk.content_hash[:12])
+            return remembered
+
+        # Step 2: exact-response cache is isolated by the complete prompt context.
+        messages = self._build_messages(chunk, glossary)
+        context_hash = prompt_fingerprint(messages)
         cached = await self._db.get_cached(
             content_hash=chunk.content_hash,
             source=self._config.source_lang,
             target=self._config.target_lang,
             model=self._config.model,
+            context_hash=context_hash,
         )
         if cached is not None:
+            record_cache_hit()
             logger.info("Cache HIT for hash=%s", chunk.content_hash[:12])
             return cached
-
-        # Step 2: Build messages
-        messages = self._build_messages(chunk, glossary)
 
         # Step 3: API call with retry
         result: str | None = None
@@ -148,6 +168,7 @@ class TranslationPipeline:
         # Step 4: Save to cache
         cache_entry = CacheEntry(
             content_hash=chunk.content_hash,
+            context_hash=context_hash,
             source_lang=self._config.source_lang,
             target_lang=self._config.target_lang,
             model=self._config.model,

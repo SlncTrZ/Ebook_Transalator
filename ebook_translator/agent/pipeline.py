@@ -19,6 +19,12 @@ import httpx
 from ebook_translator.db.database import Database
 from ebook_translator.models import CacheEntry, Chunk, GlossaryEntry
 from ebook_translator.agent.validator import check_glossary_terms, build_retry_prompt
+from ebook_translator.translator.cache_key import prompt_fingerprint
+from ebook_translator.translator.gateway import LLMConfig, LLMGateway
+from ebook_translator.translator.metrics import (
+    record_cache_hit,
+    record_translation_memory_hit,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -36,17 +42,15 @@ class AgentContext:
     source_lang: str = "en"
     target_lang: str = "vi"
     category: str = "general"
+    vendor: str = "openai"
     api_key: str = ""
     model: str = "gpt-4o-mini"
-    base_url: str = "https://api.openai.com/v1"
+    base_url: str = ""
     book_summary: str = ""
     search_results: list[dict] = field(default_factory=list)
     glossary_terms: list[dict] = field(default_factory=list)
     translation_strategy: str = ""
     style_notes: str = ""
-    total_chunks: int = 0
-    done_chunks: int = 0
-    failed_chunks: int = 0
 
 
 # ─── Tool: Gọi LLM ───────────────────────────────────────────────────────
@@ -58,22 +62,20 @@ async def _call_llm(
     response_format: dict | None = None,
     temperature: float = 0.3,
 ) -> str:
-    """Gọi LLM, trả về text."""
-    payload = {"model": ctx.model, "messages": messages, "temperature": temperature}
-    if response_format:
-        payload["response_format"] = response_format
-
-    async with httpx.AsyncClient(timeout=120) as client:
-        resp = await client.post(
-            f"{ctx.base_url}/chat/completions",
-            headers={
-                "Authorization": f"Bearer {ctx.api_key}",
-                "Content-Type": "application/json",
-            },
-            json=payload,
+    """Generate through the unified provider-agnostic LLM gateway."""
+    gateway = LLMGateway(
+        LLMConfig(
+            vendor=ctx.vendor,
+            api_key=ctx.api_key,
+            model=ctx.model,
+            base_url=ctx.base_url,
         )
-        resp.raise_for_status()
-        return resp.json()["choices"][0]["message"]["content"].strip()
+    )
+    return await gateway.generate(
+        messages,
+        temperature=temperature,
+        response_format=response_format,
+    )
 
 
 # ─── Agent 1: Research Agent ─────────────────────────────────────────────
@@ -113,13 +115,23 @@ THINK step by step before answering.
 """
 
 
-async def research_agent(preview: str, ctx: AgentContext) -> AgentContext:
-    """Research Agent: phân tích sách, search nếu cần, đề xuất metadata + glossary."""
+async def research_agent(
+    preview: str,
+    ctx: AgentContext,
+    user_feedback: str = "",
+    force_search: bool = False,
+) -> AgentContext:
+    """Research Agent: analyze metadata and honor explicit HITL feedback/search requests."""
     logger.info("[Research] Starting for book %d", ctx.book_id)
 
     from ebook_translator.agent.web_search import search_duckduckgo
 
-    user = f"[Book Excerpt]\n{preview[:2000]}\n\nThink step by step. Return JSON."
+    user = f"[Book Excerpt]\n{preview[:2000]}\n"
+    if user_feedback:
+        user += f"\n[User Feedback]\n{user_feedback}\n"
+    if force_search:
+        user += "\nThe user explicitly requested web verification. Set needs_more_search=true.\n"
+    user += "\nReturn JSON."
     messages = [
         {"role": "system", "content": RESEARCH_SYSTEM},
         {"role": "user", "content": user},
@@ -130,8 +142,8 @@ async def research_agent(preview: str, ctx: AgentContext) -> AgentContext:
 
     try:
         parsed = json.loads(raw)
-    except json.JSONDecodeError:
-        logger.warning("[Research] Non-JSON: %s", raw[:200])
+    except json.JSONDecodeError as e:
+        logger.warning("[Research] Non-JSON: %s — %s", raw[:200], e)
         return ctx
 
     ctx.title = parsed.get("title_original", ctx.title)
@@ -148,8 +160,8 @@ async def research_agent(preview: str, ctx: AgentContext) -> AgentContext:
             ctx.glossary_terms.append(term)
 
     # Re-search nếu cần
-    if parsed.get("needs_more_search") and parsed.get("search_query"):
-        query = parsed["search_query"]
+    if force_search or (parsed.get("needs_more_search") and parsed.get("search_query")):
+        query = parsed.get("search_query") or user_feedback or ctx.title or preview[:120]
         logger.info("[Research] Re-searching: %s", query)
         try:
             results = await search_duckduckgo(query, max_results=5)
@@ -176,10 +188,14 @@ async def research_agent(preview: str, ctx: AgentContext) -> AgentContext:
                 for term in p2.get("glossary_suggestions", []):
                     if term.get("source") and term.get("target"):
                         ctx.glossary_terms.append(term)
-            except json.JSONDecodeError:
-                pass
-        except Exception as e:
-            logger.warning("[Research] Re-search failed: %s", e)
+            except json.JSONDecodeError as e:
+                logger.warning(
+                    "[Research] Re-search non-JSON response: %s — %s", raw2[:100], e
+                )
+        except httpx.HTTPError as e:
+            logger.warning("[Research] Re-search HTTP failed: %s", e)
+        except (ConnectionError, TimeoutError) as e:
+            logger.warning("[Research] Re-search connection failed: %s", e)
 
     logger.info(
         "[Research] Done: %s | %s | %d terms",
@@ -195,8 +211,8 @@ async def research_agent(preview: str, ctx: AgentContext) -> AgentContext:
 
 # System prompt được lấy động từ prompts.py theo category
 def _get_translate_system(ctx: AgentContext) -> str:
-    from ebook_translator.translator.prompts import get_system_prompt
     from ebook_translator.models import BookCategory
+    from ebook_translator.translator.prompts import get_system_prompt
 
     try:
         cat = BookCategory(ctx.category)
@@ -219,16 +235,16 @@ async def translate_agent_with_validation(
 
     Flow: Cache check → Translate → Validate → Retry (nếu missing terms) → Lưu cache.
     """
-    # 1. Cache check
-    cached = await db.get_cached(
-        content_hash=chunk.content_hash,
-        source=ctx.source_lang,
-        target=ctx.target_lang,
-        model=ctx.model,
+    # 1. User-approved translation memory outranks model cache.
+    remembered = await db.get_translation_memory(
+        chunk.content_hash,
+        ctx.source_lang,
+        ctx.target_lang,
     )
-    if cached is not None:
-        logger.info("[Translate] Cache HIT %s", chunk.content_hash[:12])
-        return cached
+    if remembered is not None:
+        record_translation_memory_hit()
+        logger.info("[Translate] Translation Memory HIT %s", chunk.content_hash[:12])
+        return remembered
 
     # Build context
     context = (
@@ -259,6 +275,19 @@ async def translate_agent_with_validation(
         {"role": "user", "content": context},
     ]
 
+    context_hash = prompt_fingerprint(messages)
+    cached = await db.get_cached(
+        content_hash=chunk.content_hash,
+        source=ctx.source_lang,
+        target=ctx.target_lang,
+        model=ctx.model,
+        context_hash=context_hash,
+    )
+    if cached is not None:
+        record_cache_hit()
+        logger.info("[Translate] Cache HIT %s", chunk.content_hash[:12])
+        return cached
+
     # 2. Translate
     result = await _call_llm(messages, ctx, temperature=0.3)
 
@@ -268,6 +297,7 @@ async def translate_agent_with_validation(
     result = autoformat_chunk(chunk.original_text, result)
 
     # 3. Deterministic Validation — chỉ check terms CÓ trong source text
+    missing: list[str] = []
     for attempt in range(MAX_RETRIES):
         missing = check_glossary_terms(chunk.original_text, result, all_terms)
         if not missing:
@@ -300,6 +330,7 @@ async def translate_agent_with_validation(
     # 4. Save cache
     cache_entry = CacheEntry(
         content_hash=chunk.content_hash,
+        context_hash=context_hash,
         source_lang=ctx.source_lang,
         target_lang=ctx.target_lang,
         model=ctx.model,

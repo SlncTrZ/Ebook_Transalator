@@ -1,12 +1,12 @@
-import { useState, useRef, useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { Book, ProgressData } from "../api";
 import {
-	startTranslate,
 	cancelTranslate,
+	listCategories,
+	startAgenticTranslation,
+	startStandardTranslation,
 	translateProgress,
-	exportBook,
 } from "../api";
-import { listCategories } from "../api";
 import { MetadataReview } from "./MetadataReview";
 
 interface TranslateViewProps {
@@ -16,37 +16,37 @@ interface TranslateViewProps {
 	vendor: string;
 }
 
-export function TranslateView({
-	book,
-	apiKey,
-	model,
-	vendor,
-}: TranslateViewProps) {
+export function TranslateView({ book, apiKey, model, vendor }: TranslateViewProps) {
 	const [running, setRunning] = useState(false);
 	const [progress, setProgress] = useState<ProgressData | null>(null);
 	const [category, setCategory] = useState("general");
 	const [categories, setCategories] = useState<Record<string, string>>({});
 	const [chapterStart, setChapterStart] = useState(1);
 	const [chapterEnd, setChapterEnd] = useState(99999);
-	const [exportPath, setExportPath] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
 	const [agentic, setAgentic] = useState(false);
 	const [agentPhase, setAgentPhase] = useState("");
 	const cancelRef = useRef<(() => void) | null>(null);
+	const requiresApiKey = vendor !== "ollama";
 
 	useEffect(() => {
-		listCategories().then(setCategories).catch(console.error);
+		void listCategories().then(setCategories).catch((err) => setError(String(err)));
 	}, []);
 
+	useEffect(() => {
+		if (book?.category) setCategory(book.category);
+	}, [book?.id, book?.category]);
+
 	const handleStart = useCallback(async () => {
-		if (!book || !apiKey) return;
+		if (!book || (requiresApiKey && !apiKey)) return;
 		setRunning(true);
 		setError(null);
-		setExportPath(null);
 		setProgress(null);
+		setAgentPhase(agentic ? "Starting Agentic translation" : "Starting Standard translation");
 
 		try {
-			const result = await startTranslate(
+			const startCommand = agentic ? startAgenticTranslation : startStandardTranslation;
+			const result = await startCommand(
 				book.file_path,
 				vendor,
 				apiKey,
@@ -54,140 +54,97 @@ export function TranslateView({
 				category,
 				chapterStart,
 				chapterEnd,
-				agentic,
 			);
-			if (agentic) setAgentPhase("🤖 Researching...");
-			const bookId = result.book_id;
+			setAgentPhase(agentic ? "Agentic translation running" : "Standard translation running");
 
 			cancelRef.current = translateProgress(
-				bookId,
+				result.book_id,
+				chapterStart,
+				chapterEnd,
 				(data) => {
 					setProgress(data);
-					if (agentic) {
-						if (data.done === 0 && data.total > 0)
-							setAgentPhase("🔍 Researching...");
-						else if (data.done > 0 && data.done < data.total)
-							setAgentPhase("📝 Translating...");
-						else if (data.done === data.total) setAgentPhase("✅ Complete");
-					}
-					if (data.status === "done" || data.status === "failed") {
+					if (data.status === "done") {
+						setAgentPhase("Translation complete");
+						setRunning(false);
+					} else if (data.status === "failed") {
+						setAgentPhase("Translation completed with failures");
 						setRunning(false);
 					}
 				},
 				() => setRunning(false),
-				(err) => {
-					setError(err);
+				(message) => {
+					setError(message);
 					setRunning(false);
 				},
 			);
-		} catch (e) {
-			setError(String(e));
+		} catch (err) {
+			setError(err instanceof Error ? err.message : String(err));
 			setRunning(false);
 		}
 	}, [
 		book,
+		requiresApiKey,
 		apiKey,
+		vendor,
 		model,
 		category,
-		vendor,
 		chapterStart,
 		chapterEnd,
 		agentic,
 	]);
 
 	const handleCancel = useCallback(async () => {
-		if (cancelRef.current) cancelRef.current();
+		cancelRef.current?.();
 		await cancelTranslate();
+		setAgentPhase("Translation cancelled");
 		setRunning(false);
 	}, []);
 
-	const handleExport = useCallback(async () => {
-		if (!book) return;
-		try {
-			const result = await exportBook(book.id);
-			setExportPath(result.path);
-		} catch (e) {
-			setError(String(e));
-		}
-	}, [book]);
+	if (!book) return <p className="muted">Select a book to start the translation workflow.</p>;
 
-	if (!book) {
-		return (
-			<div className="translate-view">
-				<h2>🌐 Translate</h2>
-				<p className="muted">
-					Select a book from the Library tab to start translating.
-				</p>
-			</div>
-		);
-	}
+	const startDisabled = running || (requiresApiKey && !apiKey);
 
 	return (
 		<div className="translate-view">
-			<h2>🌐 Translate</h2>
-
 			<div className="book-info">
 				<strong>{book.title || "Untitled"}</strong>
-				{book.author && <span> by {book.author}</span>}
+				{book.author && <span> · {book.author}</span>}
 			</div>
 
-			<MetadataReview
-				book={book}
-				apiKey={apiKey}
-				model={model}
-				vendor={vendor}
-			/>
+			<MetadataReview book={book} apiKey={apiKey} model={model} vendor={vendor} />
 
 			<div className="controls">
 				<label>
-					From Chapter:
+					From chapter
 					<input
 						type="number"
 						min={1}
-						defaultValue={1}
-						style={{ width: 70, marginLeft: 4 }}
-						onChange={(e) =>
-							setChapterStart(Math.max(1, parseInt(e.target.value) || 1))
-						}
+						value={chapterStart}
+						onChange={(event) => setChapterStart(Math.max(1, Number(event.target.value) || 1))}
 					/>
 				</label>
 				<label>
-					To Chapter:
+					To chapter
 					<input
 						type="number"
 						min={1}
-						placeholder="999"
-						style={{ width: 70, marginLeft: 4 }}
-						onChange={(e) =>
-							setChapterEnd(e.target.value ? parseInt(e.target.value) : 99999)
-						}
+						value={chapterEnd >= 99999 ? "" : chapterEnd}
+						placeholder="end"
+						onChange={(event) => setChapterEnd(event.target.value ? Number(event.target.value) : 99999)}
 					/>
 				</label>
 				<label>
-					Category:
-					<select
-						value={category}
-						onChange={(e) => setCategory(e.target.value)}
-					>
+					Category
+					<select value={category} onChange={(event) => setCategory(event.target.value)}>
 						{Object.entries(categories).map(([key, label]) => (
-							<option key={key} value={key}>
-								{label}
-							</option>
+							<option key={key} value={key}>{label}</option>
 						))}
 					</select>
 				</label>
 			</div>
 
 			{error && <div className="error-banner">{error}</div>}
-
-			{agentPhase && (
-				<p
-					className="hint"
-					style={{ color: "#58a6ff", fontWeight: 600, marginTop: 8 }}
-				>
-					{agentPhase}
-				</p>
-			)}
+			{agentPhase && <p className="hint">{agentPhase}</p>}
 
 			{progress && (
 				<div className="progress-section">
@@ -195,54 +152,35 @@ export function TranslateView({
 						<div
 							className="progress-bar-fill"
 							style={{
-								width:
-									progress.total > 0
-										? `${((progress.done + progress.failed) / progress.total) * 100}%`
-										: "0%",
+								width: progress.total > 0
+									? `${((progress.done + progress.failed) / progress.total) * 100}%`
+									: "0%",
 							}}
 						/>
 					</div>
 					<p className="progress-text">
-						{progress.done} done / {progress.failed} failed / {progress.total}{" "}
-						total
+						{progress.done} done · {progress.failed} failed · {progress.total} total
 					</p>
 				</div>
 			)}
 
 			<div className="actions">
-				{!running ? (
+				{running ? (
+					<button className="btn-danger" onClick={() => void handleCancel()}>Cancel translation</button>
+				) : (
 					<>
-						<button
-							className="btn-primary"
-							onClick={handleStart}
-							disabled={!apiKey}
-							title={!apiKey ? "Set API key in Settings" : ""}
-						>
-							▶ {agentic ? "Agentic" : "Standard"} Translation
+						<button className="btn-primary" onClick={() => void handleStart()} disabled={startDisabled}>
+							Start {agentic ? "Agentic" : "Standard"}
 						</button>
-						<button
-							onClick={() => setAgentic(!agentic)}
-							style={{
-								background: agentic ? "#1f6feb" : "#21262d",
-								borderColor: agentic ? "#58a6ff" : "#30363d",
-							}}
-						>
-							{agentic ? "🤖 Agentic" : "📄 Standard"}
+						<button onClick={() => setAgentic((value) => !value)}>
+							Mode: {agentic ? "Agentic" : "Standard"}
 						</button>
 					</>
-				) : (
-					<button className="btn-danger" onClick={handleCancel}>
-						⏹ Cancel
-					</button>
 				)}
-
-				<button onClick={handleExport} disabled={running}>
-					📦 Export EPUB
-				</button>
 			</div>
 
-			{exportPath && (
-				<div className="success-banner">✅ Exported: {exportPath}</div>
+			{requiresApiKey && !apiKey && (
+				<p className="muted">Configure an API key in Settings before starting this provider.</p>
 			)}
 		</div>
 	);

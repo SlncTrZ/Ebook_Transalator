@@ -6,7 +6,6 @@ Wing: tcdserver | Topic: ebook_translator | Updated: 2026-07-22 14:00
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -19,7 +18,6 @@ from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
-from sse_starlette.sse import EventSourceResponse
 
 from ebook_translator.db.database import Database
 from ebook_translator.models import Book, BookCategory
@@ -39,6 +37,7 @@ DB_PATH = os.environ.get("ET_DB_PATH")
 db: Database | None = None
 active_pipeline: TranslationPipeline | None = None
 active_book_id: int | None = None
+active_job_id: int | None = None
 _cancel_event = asyncio.Event()
 
 
@@ -73,9 +72,14 @@ class CreateGlossaryRequest(BaseModel):
 class UpdateBookRequest(BaseModel):
     title: str | None = None
     author: str | None = None
+    localized_title: str | None = None
     category: str | None = None
     source_lang: str | None = None
     target_lang: str | None = None
+
+
+class UpdateChunkRequest(BaseModel):
+    translated_text: str
 
 
 class AnalyzeRequest(BaseModel):
@@ -134,9 +138,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator:
 app = FastAPI(title="Ebook Translator API", version="0.2.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=[
+        "tauri://localhost",
+        "http://tauri.localhost",
+        "http://localhost:1420",
+        "http://127.0.0.1:1420",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ],
+    allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+    allow_headers=["Content-Type"],
 )
 
 
@@ -213,14 +224,28 @@ async def upload_book(file: UploadFile = File(...)) -> dict:
             detail=f"Unsupported format: {ext}. Only .epub and .txt allowed.",
         )
 
-    # Save to temp
+    # Save to temp without trusting the client filename or buffering the whole file.
     temp_dir = Path(tempfile.gettempdir()) / "ebook_translator_uploads"
-    temp_dir.mkdir(parents=True, exist_ok=True)
-    temp_path = temp_dir / f"{int(__import__('time').time())}_{file.filename}"
-
-    content = await file.read()
-    with open(temp_path, "wb") as f:
-        f.write(content)
+    safe_name = Path(file.filename).name
+    max_upload_bytes = 200 * 1024 * 1024
+    written = 0
+    try:
+        temp_dir.mkdir(parents=True, exist_ok=True)
+        temp_path = temp_dir / f"{int(__import__('time').time())}_{safe_name}"
+        with open(temp_path, "wb") as destination:
+            while chunk := await file.read(1024 * 1024):
+                written += len(chunk)
+                if written > max_upload_bytes:
+                    destination.close()
+                    temp_path.unlink(missing_ok=True)
+                    raise HTTPException(status_code=413, detail="Upload exceeds 200 MiB limit")
+                destination.write(chunk)
+    except HTTPException:
+        raise
+    except OSError as e:
+        raise HTTPException(
+            status_code=500, detail=f"Failed to save upload: {e}"
+        ) from e
 
     # Parse
     d = _get_db()
@@ -228,7 +253,10 @@ async def upload_book(file: UploadFile = File(...)) -> dict:
     try:
         parsed = parser.parse(str(temp_path))
     except Exception as e:
-        temp_path.unlink(missing_ok=True)
+        try:
+            temp_path.unlink(missing_ok=True)
+        except OSError:
+            pass
         raise HTTPException(status_code=400, detail=str(e)) from e
 
     title = parsed.title
@@ -282,7 +310,7 @@ async def update_book(book_id: int, req: UpdateBookRequest) -> dict:
     d = _get_db()
     sets = []
     params = []
-    for field in ("title", "author", "source_lang", "target_lang"):
+    for field in ("title", "author", "localized_title", "source_lang", "target_lang"):
         val = getattr(req, field, None)
         if val is not None:
             sets.append(f"{field} = ?")
@@ -311,20 +339,15 @@ async def analyze_book(book_id: int, req: AnalyzeRequest) -> dict:
         raise HTTPException(status_code=404, detail="Book not found")
 
     api_key = req.api_key or os.environ.get("OPENAI_API_KEY", "")
-    if not api_key:
+    v = VENDORS.get(req.vendor)
+    if not api_key and (v is None or v.requires_api_key):
         raise HTTPException(status_code=400, detail="API key required")
 
     base_url = req.base_url
-    if not base_url:
-        v = VENDORS.get(req.vendor)
-        if v:
-            base_url = v.base_url
+    if not base_url and v:
+        base_url = v.base_url
 
-    model = req.model or (
-        VENDORS.get(req.vendor).default_model
-        if VENDORS.get(req.vendor)
-        else "gpt-4o-mini"
-    )
+    model = req.model or (v.default_model if v else "gpt-4o-mini")
 
     try:
         preview = await get_preview_text(book.file_path)
@@ -333,6 +356,7 @@ async def analyze_book(book_id: int, req: AnalyzeRequest) -> dict:
             api_key=api_key,
             model=model,
             base_url=base_url,
+            vendor=req.vendor,
             user_feedback=req.user_feedback,
             force_search=req.force_search,
         )
@@ -364,21 +388,27 @@ async def research_book(book_id: int, req: AnalyzeRequest) -> dict:
         raise HTTPException(status_code=404, detail="Book not found")
 
     api_key = req.api_key or os.environ.get("OPENAI_API_KEY", "")
-    if not api_key:
+    v = VENDORS.get(req.vendor)
+    if not api_key and (v is None or v.requires_api_key):
         raise HTTPException(status_code=400, detail="API key required")
 
-    base_url = req.base_url or (
-        VENDORS.get(req.vendor).base_url if VENDORS.get(req.vendor) else ""
-    )
-    model = req.model or (
-        VENDORS.get(req.vendor).default_model
-        if VENDORS.get(req.vendor)
-        else "gpt-4o-mini"
-    )
+    base_url = req.base_url or (v.base_url if v else "")
+    model = req.model or (v.default_model if v else "gpt-4o-mini")
 
-    ctx = AgentContext(book_id=book_id, api_key=api_key, model=model, base_url=base_url)
+    ctx = AgentContext(
+        book_id=book_id,
+        vendor=req.vendor,
+        api_key=api_key,
+        model=model,
+        base_url=base_url,
+    )
     preview = await get_preview_text(book.file_path)
-    ctx = await research_agent(preview, ctx)
+    ctx = await research_agent(
+        preview,
+        ctx,
+        user_feedback=req.user_feedback,
+        force_search=req.force_search,
+    )
 
     # Luu glossary suggestions vao DB ngay
     for term in ctx.glossary_terms:
@@ -417,10 +447,11 @@ async def confirm_metadata(book_id: int, req: ConfirmMetadataRequest) -> dict:
         raise HTTPException(status_code=404, detail="Book not found")
 
     await d.conn.execute(
-        "UPDATE books SET title=?, author=?, source_lang=?, target_lang=?, category=? WHERE id=?",
+        "UPDATE books SET title=?, author=?, localized_title=?, source_lang=?, target_lang=?, category=? WHERE id=?",
         (
             req.title or book.title,
             req.author or book.author,
+            req.localized_title or book.localized_title,
             req.source_lang,
             req.target_lang,
             req.category,
@@ -446,6 +477,69 @@ async def list_chunks(book_id: int, status: str | None = None) -> list[dict]:
     cursor = await d.conn.execute(sql, params)
     rows = await cursor.fetchall()
     return [dict(r) for r in rows]
+
+
+@app.patch("/api/chunks/{chunk_id}")
+async def update_chunk_translation(chunk_id: int, req: UpdateChunkRequest) -> dict:
+    """Persist a user-approved translation. Done chunks are not auto-retranslated."""
+    d = _get_db()
+    cursor = await d.conn.execute(
+        "SELECT book_id FROM chunks WHERE id = ?", (chunk_id,)
+    )
+    row = await cursor.fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Chunk not found")
+    await d.conn.execute(
+        "UPDATE chunks SET translated_text = ?, status = 'done', error_log = NULL WHERE id = ?",
+        (req.translated_text, chunk_id),
+    )
+    await d.conn.commit()
+    await d.update_book_status(row["book_id"])
+    return {"ok": True, "chunk_id": chunk_id}
+
+
+@app.post("/api/chunks/{chunk_id}/translation-memory")
+async def remember_chunk_translation(chunk_id: int, req: UpdateChunkRequest) -> dict:
+    """Explicitly promote a translation into reusable cross-book memory."""
+    d = _get_db()
+    cursor = await d.conn.execute(
+        "SELECT c.content_hash, c.original_text, b.source_lang, b.target_lang "
+        "FROM chunks c JOIN books b ON b.id = c.book_id WHERE c.id = ?",
+        (chunk_id,),
+    )
+    row = await cursor.fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Chunk not found")
+    if not req.translated_text.strip():
+        raise HTTPException(status_code=400, detail="Translation memory entry cannot be empty")
+    await d.set_translation_memory(
+        row["content_hash"],
+        row["original_text"],
+        row["source_lang"],
+        row["target_lang"],
+        req.translated_text,
+        origin="manual",
+    )
+    return {"ok": True, "chunk_id": chunk_id, "stored": "translation_memory"}
+
+
+@app.post("/api/chunks/{chunk_id}/requeue")
+async def requeue_chunk(chunk_id: int) -> dict:
+    """Mark one chunk retryable without touching its source text."""
+    d = _get_db()
+    cursor = await d.conn.execute(
+        "SELECT book_id FROM chunks WHERE id = ?", (chunk_id,)
+    )
+    row = await cursor.fetchone()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Chunk not found")
+    await d.conn.execute(
+        "UPDATE chunks SET status = 'pending', error_log = NULL WHERE id = ?",
+        (chunk_id,),
+    )
+    await d.conn.commit()
+    await d.update_book_status(row["book_id"])
+    return {"ok": True, "chunk_id": chunk_id, "status": "pending"}
 
 
 @app.get("/api/books/{book_id}/reader")
@@ -521,7 +615,7 @@ async def delete_glossary(entry_id: int) -> dict:
 
 @app.post("/api/translate/start")
 async def start_translate(req: StartTranslateRequest) -> dict:
-    global active_pipeline, active_book_id, _cancel_event
+    global active_pipeline, active_book_id, active_job_id, _cancel_event
     d = _get_db()
 
     if active_pipeline:
@@ -564,49 +658,48 @@ async def start_translate(req: StartTranslateRequest) -> dict:
     )
     active_book_id = book_id
 
-    if not req.agentic:
-        config = TranslationConfig(
-            vendor=req.vendor,
-            api_key=api_key,
-            model=req.model or "gpt-4o-mini",
-            base_url=req.base_url,
-            source_lang=req.source_lang,
-            target_lang=req.target_lang,
+    if req.agentic:
+        raise HTTPException(
+            status_code=400,
+            detail="Agentic translation must use /api/translate/agentic",
         )
-        # Cap nhat total_chunks truoc khi chay background task
-        is_range = req.chapter_end < 99999 or req.chapter_start > 0
-        if is_range:
-            cursor = await d.conn.execute(
-                "SELECT COUNT(*) as cnt FROM chunks WHERE book_id = ? AND status = 'pending'",
-                (book_id,),
-            )
-            row = await cursor.fetchone()
-            all_total = row["cnt"] if row else 0
-            # Uoc luong so chunk trong range (ty le theo chapter)
-            cursor2 = await d.conn.execute(
-                "SELECT COUNT(*) as cnt, MAX(chapter_idx) as max_ch FROM chunks WHERE book_id = ?",
-                (book_id,),
-            )
-            row2 = await cursor2.fetchone()
-            if row2 and row2["max_ch"] > 0:
-                ratio = (req.chapter_end - req.chapter_start + 1) / (row2["max_ch"] + 1)
-                est = max(1, int(all_total * ratio))
-                await d.conn.execute(
-                    "UPDATE books SET total_chunks = ? WHERE id = ?", (est, book_id)
-                )
-                await d.conn.commit()
 
-        active_pipeline = TranslationPipeline(d, config)
-        asyncio.create_task(
-            _run_translation(book_id, req.chapter_start, req.chapter_end)
-        )
-        return {"book_id": book_id, "status": "started"}
+    config = TranslationConfig(
+        vendor=req.vendor,
+        api_key=api_key,
+        model=req.model or "gpt-4o-mini",
+        base_url=req.base_url,
+        source_lang=req.source_lang,
+        target_lang=req.target_lang,
+    )
+
+    active_pipeline = TranslationPipeline(d, config)
+    active_job_id = await d.create_translation_job(
+        book_id,
+        "standard",
+        req.vendor,
+        config.model,
+        req.chapter_start,
+        req.chapter_end,
+    )
+    asyncio.create_task(
+        _run_translation(book_id, active_job_id, req.chapter_start, req.chapter_end)
+    )
+    return {
+        "book_id": book_id,
+        "job_id": active_job_id,
+        "status": "started",
+        "mode": "standard",
+    }
 
 
 async def _run_translation(
-    book_id: int, chapter_start: int = 0, chapter_end: int = 99999
+    book_id: int,
+    job_id: int | None = None,
+    chapter_start: int = 0,
+    chapter_end: int = 99999,
 ) -> None:
-    global active_pipeline, active_book_id
+    global active_pipeline, active_book_id, active_job_id
     d = _get_db()
     pipeline = active_pipeline
     if pipeline is None:
@@ -619,13 +712,6 @@ async def _run_translation(
             pending = [
                 c for c in pending if chapter_start <= c.chapter_idx + 1 <= chapter_end
             ]
-        total = len(pending)
-        if total > 0:
-            await d.conn.execute(
-                "UPDATE books SET total_chunks = ? WHERE id = ?", (total, book_id)
-            )
-            await d.conn.commit()
-
         for _, chunk in enumerate(pending):
             if _cancel_event.is_set():
                 logger.info("Translation cancelled for book %d", book_id)
@@ -640,21 +726,33 @@ async def _run_translation(
                     await d.mark_chunk_failed(chunk.id, str(e))
 
         await d.update_book_status(book_id)
+        if job_id is not None:
+            if _cancel_event.is_set():
+                await d.finish_translation_job(job_id, "cancelled")
+            else:
+                scoped = await d.get_chunk_progress(book_id, chapter_start, chapter_end)
+                await d.finish_translation_job(job_id, str(scoped["status"]))
     except Exception as e:
         logger.error("Translation error: %s", e)
+        if job_id is not None:
+            await d.finish_translation_job(job_id, "failed", str(e)[:500])
     finally:
         await pipeline.close()
         active_pipeline = None
         active_book_id = None
+        active_job_id = None
 
 
 @app.post("/api/translate/cancel")
 async def cancel_translate() -> dict:
-    global active_pipeline
+    global active_pipeline, active_job_id
     _cancel_event.set()
     if active_pipeline:
         await active_pipeline.close()
         active_pipeline = None
+    if active_job_id is not None:
+        await _get_db().finish_translation_job(active_job_id, "cancelled")
+        active_job_id = None
     return {"status": "cancelled"}
 
 
@@ -665,7 +763,7 @@ async def translate_agentic(req: StartTranslateRequest) -> dict:
         AgentContext,
     )
 
-    global active_pipeline, active_book_id, _cancel_event
+    global active_pipeline, active_book_id, active_job_id, _cancel_event
     d = _get_db()
 
     if active_pipeline:
@@ -691,22 +789,46 @@ async def translate_agentic(req: StartTranslateRequest) -> dict:
     if book is None:
         raise HTTPException(status_code=404)
 
+    from ebook_translator.translator.adapters import VENDORS
+
+    vendor_info = VENDORS.get(req.vendor)
     ctx = AgentContext(
         book_id=book_id,
+        vendor=req.vendor,
         api_key=api_key,
-        model=req.model or "gpt-4o-mini",
+        model=req.model or (vendor_info.default_model if vendor_info else "gpt-4o-mini"),
         source_lang=book.source_lang,
         target_lang=book.target_lang,
         category=book.category,
-        base_url=req.base_url,
+        base_url=req.base_url or (vendor_info.base_url if vendor_info else ""),
         title=book.title,
         author=book.author,
     )
 
-    asyncio.create_task(
-        _run_agentic_translate(d, book_id, ctx, req.chapter_start, req.chapter_end)
+    active_job_id = await d.create_translation_job(
+        book_id,
+        "agentic",
+        req.vendor,
+        ctx.model,
+        req.chapter_start,
+        req.chapter_end,
     )
-    return {"book_id": book_id, "status": "agentic_started"}
+    asyncio.create_task(
+        _run_agentic_translate(
+            d,
+            book_id,
+            ctx,
+            req.chapter_start,
+            req.chapter_end,
+            active_job_id,
+        )
+    )
+    return {
+        "book_id": book_id,
+        "job_id": active_job_id,
+        "status": "started",
+        "mode": "agentic",
+    }
 
 
 async def _run_agentic_translate(
@@ -715,9 +837,10 @@ async def _run_agentic_translate(
     ctx: AgentContext,
     chapter_start: int,
     chapter_end: int,
+    job_id: int | None = None,
 ) -> None:
     """Background task: Translate Agent + Validation."""
-    from ebook_translator.agent.pipeline import translate_agent_with_validation
+    from ebook_translator.agent.pipeline import translate_agent_with_validation  # noqa: F811
 
     try:
         glossary = await d.get_glossary(book_id)
@@ -726,8 +849,6 @@ async def _run_agentic_translate(
             pending = [
                 c for c in pending if chapter_start <= c.chapter_idx + 1 <= chapter_end
             ]
-        ctx.total_chunks = len(pending)
-
         for chunk in pending:
             if _cancel_event.is_set():
                 break
@@ -737,102 +858,50 @@ async def _run_agentic_translate(
                 )
                 if chunk.id is not None:
                     await d.update_chunk_result(chunk.id, translated, "done")
-                ctx.done_chunks += 1
             except Exception as e:
                 if chunk.id is not None:
                     await d.mark_chunk_failed(chunk.id, str(e))
-                ctx.failed_chunks += 1
 
         await d.update_book_status(book_id)
+        if job_id is not None:
+            if _cancel_event.is_set():
+                await d.finish_translation_job(job_id, "cancelled")
+            else:
+                scoped = await d.get_chunk_progress(book_id, chapter_start, chapter_end)
+                await d.finish_translation_job(job_id, str(scoped["status"]))
     except Exception as e:
         logger.exception("Agentic translate failed: %s", e)
+        if job_id is not None:
+            await d.finish_translation_job(job_id, "failed", str(e)[:500])
     finally:
-        global active_pipeline
+        global active_pipeline, active_job_id
         active_pipeline = None
-
-
-@app.get("/api/translate/progress/{book_id}")
-async def translate_progress(book_id: int):
-    """SSE endpoint — push realtime progress updates."""
-
-    async def event_generator() -> AsyncGenerator:
-        d = _get_db()
-        while True:
-            if _cancel_event.is_set():
-                yield {"event": "cancelled", "data": json.dumps({"book_id": book_id})}
-                return
-
-            cursor = await d.conn.execute(
-                "SELECT total_chunks, done_chunks, failed_chunks, status FROM books WHERE id = ?",
-                (book_id,),
-            )
-            row = await cursor.fetchone()
-            if row is None:
-                yield {
-                    "event": "error",
-                    "data": json.dumps({"error": "Book not found"}),
-                }
-                return
-
-            data = {
-                "total": row["total_chunks"],
-                "done": row["done_chunks"],
-                "failed": row["failed_chunks"],
-                "status": row["status"],
-            }
-            yield {"event": "progress", "data": json.dumps(data)}
-
-            if row["status"] in ("done", "failed"):
-                yield {"event": "complete", "data": json.dumps(data)}
-                return
-
-            await asyncio.sleep(1)
-
-    return EventSourceResponse(event_generator())
+        active_job_id = None
 
 
 @app.get("/api/translate/status/{book_id}")
-async def translate_status(book_id: int) -> dict:
-    """Polling endpoint — đếm done/failed trực tiếp từ chunks table."""
+async def translate_status(
+    book_id: int,
+    chapter_start: int = 0,
+    chapter_end: int = 99999,
+) -> dict:
+    """Polling endpoint backed by canonical chunk state for the requested scope."""
     d = _get_db()
-    cursor = await d.conn.execute(
-        "SELECT COUNT(*) as cnt FROM chunks WHERE book_id = ? AND status = 'done'",
-        (book_id,),
-    )
-    row = await cursor.fetchone()
-    done = row["cnt"] if row else 0
-    cursor = await d.conn.execute(
-        "SELECT COUNT(*) as cnt FROM chunks WHERE book_id = ? AND status = 'failed'",
-        (book_id,),
-    )
-    row = await cursor.fetchone()
-    failed = row["cnt"] if row else 0
-    cursor = await d.conn.execute(
-        "SELECT COUNT(*) as cnt FROM chunks WHERE book_id = ?",
-        (book_id,),
-    )
-    row = await cursor.fetchone()
-    total = row["cnt"] if row else 0
-    cursor = await d.conn.execute(
-        "SELECT status FROM books WHERE id = ?",
-        (book_id,),
-    )
-    book_row = await cursor.fetchone()
-    status = book_row["status"] if book_row else "not_found"
+    book = await d.get_book(book_id)
+    if book is None:
+        return {
+            "total": 0,
+            "done": 0,
+            "failed": 0,
+            "status": "not_found",
+        }
 
-    # Auto-update status neu done + failed = total
-    if total > 0 and done + failed >= total:
-        status = "failed" if failed > 0 else "done"
-        await d.conn.execute(
-            "UPDATE books SET status = ? WHERE id = ?", (status, book_id)
-        )
-        await d.conn.commit()
-
+    progress = await d.get_chunk_progress(book_id, chapter_start, chapter_end)
     return {
-        "total": total,
-        "done": done,
-        "failed": failed,
-        "status": status,
+        "total": progress["total"],
+        "done": progress["done"],
+        "failed": progress["failed"],
+        "status": progress["status"],
     }
 
 
@@ -889,10 +958,28 @@ async def download_export(book_id: int):
     )
 
 
+@app.get("/api/jobs/{book_id}/latest")
+async def latest_translation_job(book_id: int) -> dict:
+    job = await _get_db().get_latest_job(book_id)
+    if job is None:
+        raise HTTPException(status_code=404, detail="No translation job found")
+    return job
+
+
+@app.get("/api/diagnostics")
+async def diagnostics() -> dict:
+    """Local operational counters for diagnosis; no external telemetry."""
+    from ebook_translator.translator.metrics import snapshot
+
+    return {
+        "database": await _get_db().get_diagnostics(),
+        "runtime": snapshot(),
+    }
+
+
 # ── Info / Config ────────────────────────────────────────────────────────
 
 
-@app.get("/api/vendors")
 @app.get("/api/vendors")
 async def list_vendors() -> list[dict]:
     """Danh sach vendor AI ho tro."""

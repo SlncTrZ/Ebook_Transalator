@@ -5,6 +5,7 @@ Wing: tcdserver | Topic: ebook_translator | Updated: 2026-07-22 14:00
 
 from __future__ import annotations
 
+from html import escape
 from pathlib import Path
 
 from ebook_translator.db.database import Database
@@ -53,9 +54,11 @@ async def export_book(
     chapters: dict[int, list[dict]] = {}
     for r in rows:
         ch = r["chapter_idx"]
-        chapters.setdefault(ch, []).append(r)
+        chapters.setdefault(ch, []).append(dict(r))
 
     if format == "epub":
+        if Path(book.file_path).suffix.lower() == ".epub" and Path(book.file_path).exists():
+            return await _export_epub_preserving_source(book, chapters, output_path, mode)
         return await _export_epub(book, chapters, output_path, mode)
     else:
         return await _export_txt(book, chapters, output_path, mode)
@@ -86,9 +89,88 @@ async def _export_txt(
                 lines.append(chunk["translated_text"])
             lines.append("")
 
-    Path(output_path).parent.mkdir(parents=True, exist_ok=True)
-    with open(output_path, "w", encoding="utf-8") as f:
-        f.write("\n".join(lines))
+    try:
+        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        raise ValueError(f"Cannot create output directory: {e}") from e
+    try:
+        with open(output_path, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines))
+    except OSError as e:
+        raise ValueError(f"Cannot write output file: {e}") from e
+    return output_path
+
+
+async def _export_epub_preserving_source(
+    book,
+    chapters: dict[int, list],
+    output_path: str,
+    mode: str,
+) -> str:
+    """Patch only source XHTML entries; preserve all other EPUB bytes/metadata."""
+    from copy import copy
+    from pathlib import PurePosixPath
+    from zipfile import ZIP_DEFLATED, ZIP_STORED, ZipFile
+    from xml.etree import ElementTree
+
+    from bs4 import BeautifulSoup
+    from ebooklib import ITEM_DOCUMENT, epub
+
+    source_book = epub.read_epub(book.file_path)
+    replacements: dict[str, bytes] = {}
+
+    with ZipFile(book.file_path, "r") as source_zip:
+        container = ElementTree.fromstring(source_zip.read("META-INF/container.xml"))
+        rootfile = next(
+            element
+            for element in container.iter()
+            if element.tag.rsplit("}", 1)[-1] == "rootfile"
+        )
+        opf_path = PurePosixPath(rootfile.attrib["full-path"])
+        content_root = opf_path.parent
+
+        chapter_idx = 0
+        for item in source_book.get_items():
+            if item.get_type() != ITEM_DOCUMENT:
+                continue
+
+            soup = BeautifulSoup(item.get_content(), "lxml")
+            elements = soup.find_all(["p", "h1", "h2", "h3", "h4", "h5", "h6"])
+            source_elements = [element for element in elements if element.get_text(strip=True)]
+            if not source_elements:
+                continue
+
+            translated_chunks = chapters.get(chapter_idx, [])
+            by_paragraph = {chunk["paragraph_idx"]: chunk for chunk in translated_chunks}
+            for paragraph_idx, element in enumerate(source_elements):
+                chunk = by_paragraph.get(paragraph_idx)
+                if not chunk:
+                    continue
+                translated = chunk["translated_text"] or ""
+                if mode == "bilingual":
+                    translated_tag = soup.new_tag("p")
+                    translated_tag["class"] = ["ebook-translator-translation"]
+                    translated_tag.string = translated
+                    element.insert_after(translated_tag)
+                else:
+                    element.clear()
+                    element.string = translated
+
+            internal_path = str(content_root / PurePosixPath(item.file_name))
+            replacements[internal_path] = str(soup).encode("utf-8")
+            chapter_idx += 1
+
+        Path(output_path).parent.mkdir(parents=True, exist_ok=True)
+        with ZipFile(output_path, "w") as output_zip:
+            for info in source_zip.infolist():
+                data = replacements.get(info.filename, source_zip.read(info.filename))
+                cloned = copy(info)
+                if info.filename == "mimetype":
+                    cloned.compress_type = ZIP_STORED
+                elif cloned.compress_type not in (ZIP_STORED, ZIP_DEFLATED):
+                    cloned.compress_type = ZIP_DEFLATED
+                output_zip.writestr(cloned, data)
+
     return output_path
 
 
@@ -119,12 +201,12 @@ async def _export_epub(
         for chunk in chapters[ch_idx]:
             if mode == "bilingual":
                 content_parts.append(
-                    f"<p style='color:#888;font-style:italic'>{chunk['original_text']}</p>"
+                    f"<p style='color:#888;font-style:italic'>{escape(chunk['original_text'])}</p>"
                 )
-                content_parts.append(f"<p>{chunk['translated_text']}</p>")
+                content_parts.append(f"<p>{escape(chunk['translated_text'] or '')}</p>")
                 content_parts.append("<hr/>")
             else:
-                content_parts.append(f"<p>{chunk['translated_text']}</p>")
+                content_parts.append(f"<p>{escape(chunk['translated_text'] or '')}</p>")
 
         chap = epub.EpubHtml(
             title=f"Chapter {ch_idx + 1}",

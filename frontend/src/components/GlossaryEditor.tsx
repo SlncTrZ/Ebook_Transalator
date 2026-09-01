@@ -1,6 +1,6 @@
-import { useState, useEffect, useCallback } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { GlossaryItem } from "../api";
-import { getGlossary, createGlossary, deleteGlossary } from "../api";
+import { createGlossary, deleteGlossary, getGlossary } from "../api";
 
 interface GlossaryEditorProps {
 	bookId: number | null;
@@ -11,94 +11,58 @@ export function GlossaryEditor({ bookId }: GlossaryEditorProps) {
 	const [source, setSource] = useState("");
 	const [target, setTarget] = useState("");
 	const [notes, setNotes] = useState("");
+	const [error, setError] = useState<string | null>(null);
 
 	const loadEntries = useCallback(async () => {
 		if (!bookId) return;
+		setError(null);
 		try {
-			const data = await getGlossary(bookId);
-			setEntries(data);
-		} catch (e) {
-			console.error("Failed to load glossary", e);
+			setEntries(await getGlossary(bookId));
+		} catch (err) {
+			setError(err instanceof Error ? err.message : String(err));
 		}
 	}, [bookId]);
 
 	useEffect(() => {
-		if (bookId) loadEntries();
+		if (bookId) void loadEntries();
 		else setEntries([]);
 	}, [bookId, loadEntries]);
 
 	const handleAdd = async () => {
 		if (!bookId || !source.trim() || !target.trim()) return;
+		setError(null);
 		try {
 			await createGlossary(bookId, source.trim(), target.trim(), notes.trim());
 			setSource("");
 			setTarget("");
 			setNotes("");
 			await loadEntries();
-		} catch (e) {
-			console.error("Failed to add glossary entry", e);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : String(err));
 		}
 	};
 
-	const handleDelete = async (id: number) => {
-		try {
-			await deleteGlossary(id);
-			await loadEntries();
-		} catch (e) {
-			console.error("Failed to delete entry", e);
-		}
-	};
-
-	if (!bookId) {
-		return (
-			<div className="glossary-editor">
-				<h2>📝 Glossary</h2>
-				<p className="muted">
-					Select a book from the Library tab to manage its glossary.
-				</p>
-			</div>
-		);
-	}
+	if (!bookId) return <p className="muted">Select a book to manage glossary terms.</p>;
 
 	return (
 		<div className="glossary-editor">
-			<h2>📝 Glossary</h2>
-			<p className="muted">
-				Book ID: {bookId} — Add term mappings for consistent translations.
-			</p>
-
+			<p className="muted">Book-scoped terminology. Exact mappings are injected during translation.</p>
 			<div className="glossary-form">
-				<input
-					placeholder="Source (e.g. Harry Potter)"
-					value={source}
-					onChange={(e) => setSource(e.target.value)}
-				/>
-				<input
-					placeholder="Target (e.g. Harry Potter)"
-					value={target}
-					onChange={(e) => setTarget(e.target.value)}
-				/>
-				<input
-					placeholder="Notes (optional)"
-					value={notes}
-					onChange={(e) => setNotes(e.target.value)}
-				/>
-				<button onClick={handleAdd} disabled={!source.trim() || !target.trim()}>
-					+ Add
+				<input placeholder="Source term" value={source} onChange={(event) => setSource(event.target.value)} />
+				<input placeholder="Target term" value={target} onChange={(event) => setTarget(event.target.value)} />
+				<input placeholder="Notes" value={notes} onChange={(event) => setNotes(event.target.value)} />
+				<button onClick={() => void handleAdd()} disabled={!source.trim() || !target.trim()}>
+					Add term
 				</button>
 			</div>
 
+			{error && <div className="error-banner">{error}</div>}
 			{entries.length === 0 ? (
 				<p className="muted">No glossary entries yet.</p>
 			) : (
 				<table className="glossary-table">
 					<thead>
-						<tr>
-							<th>Source</th>
-							<th>Target</th>
-							<th>Notes</th>
-							<th></th>
-						</tr>
+						<tr><th>Source</th><th>Target</th><th>Notes</th><th>Action</th></tr>
 					</thead>
 					<tbody>
 						{entries.map((entry) => (
@@ -109,9 +73,12 @@ export function GlossaryEditor({ bookId }: GlossaryEditorProps) {
 								<td>
 									<button
 										className="btn-small btn-danger"
-										onClick={() => handleDelete(entry.id)}
+										onClick={async () => {
+											await deleteGlossary(entry.id);
+											await loadEntries();
+										}}
 									>
-										✕
+										Delete
 									</button>
 								</td>
 							</tr>

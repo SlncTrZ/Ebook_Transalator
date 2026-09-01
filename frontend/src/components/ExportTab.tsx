@@ -1,16 +1,14 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import type { Book } from "../api";
-import { listBooks } from "../api";
+import { exportBook } from "../api";
 
 interface ExportTabProps {
 	selectedBook: Book | null;
 }
 
 export function ExportTab({ selectedBook }: ExportTabProps) {
-	const [books, setBooks] = useState<Book[]>([]);
-	const [bookId, setBookId] = useState(selectedBook?.id || 0);
-	const [mode, setMode] = useState("translated");
-	const [format, setFormat] = useState("txt");
+	const [mode, setMode] = useState<"translated" | "bilingual">("translated");
+	const [format, setFormat] = useState<"txt" | "epub">("txt");
 	const [chapterStart, setChapterStart] = useState(1);
 	const [chapterEnd, setChapterEnd] = useState(99999);
 	const [outputPath, setOutputPath] = useState("");
@@ -18,141 +16,83 @@ export function ExportTab({ selectedBook }: ExportTabProps) {
 	const [result, setResult] = useState<string | null>(null);
 	const [error, setError] = useState<string | null>(null);
 
-	useEffect(() => {
-		listBooks().then(setBooks).catch(console.error);
-	}, []);
-
-	useEffect(() => {
-		if (selectedBook) setBookId(selectedBook.id);
-	}, [selectedBook]);
+	if (!selectedBook) return <p className="muted">Select a book before exporting.</p>;
 
 	const handleExport = async () => {
-		if (!bookId) return;
 		setExporting(true);
 		setError(null);
 		setResult(null);
 		try {
-			const res = await fetch("http://127.0.0.1:8080/api/export/" + bookId, {
-				method: "POST",
-				headers: { "Content-Type": "application/json" },
-				body: JSON.stringify({
-					output_path: outputPath,
-					mode,
-					format,
-					chapter_start: Math.max(1, chapterStart),
-					chapter_end: Math.min(chapterEnd, 99999),
-				}),
+			const response = await exportBook(selectedBook.id, {
+				output_path: outputPath,
+				mode,
+				format,
+				chapter_start: Math.max(1, chapterStart),
+				chapter_end: Math.min(chapterEnd, 99999),
 			});
-			if (!res.ok) {
-				const text = await res.text();
-				throw new Error(text);
-			}
-			const data = await res.json();
-			setResult(data.path);
-		} catch (e: any) {
-			setError(e?.message || String(e));
+			setResult(response.path);
+		} catch (err) {
+			setError(err instanceof Error ? err.message : String(err));
+		} finally {
+			setExporting(false);
 		}
-		setExporting(false);
 	};
-
-	const currentBook = books.find((b) => b.id === bookId);
 
 	return (
 		<div className="export-tab">
-			<h2>📦 Export</h2>
+			<p className="muted">
+				Export scope is tied to the active book. EPUB input uses source-preserving export when possible.
+			</p>
 
-			<div className="setting-group">
-				<label>Book</label>
-				<select
-					value={bookId}
-					onChange={(e) => setBookId(parseInt(e.target.value))}
-				>
-					<option value={0}>— Select —</option>
-					{books.map((b) => (
-						<option key={b.id} value={b.id}>
-							{b.title || "Untitled"} ({b.done_chunks}/{b.total_chunks} done)
-						</option>
-					))}
-				</select>
+			<div className="review-fields export-grid">
+				<label>
+					Mode
+					<select value={mode} onChange={(event) => setMode(event.target.value as "translated" | "bilingual")}>
+						<option value="translated">Translated only</option>
+						<option value="bilingual">Bilingual source + translation</option>
+					</select>
+				</label>
+				<label>
+					Format
+					<select value={format} onChange={(event) => setFormat(event.target.value as "txt" | "epub")}>
+						<option value="txt">TXT</option>
+						<option value="epub">EPUB</option>
+					</select>
+				</label>
+				<label>
+					From chapter
+					<input type="number" min={1} value={chapterStart} onChange={(event) => setChapterStart(Number(event.target.value) || 1)} />
+				</label>
+				<label>
+					To chapter
+					<input
+						type="number"
+						min={1}
+						value={chapterEnd >= 99999 ? "" : chapterEnd}
+						placeholder="end"
+						onChange={(event) => setChapterEnd(event.target.value ? Number(event.target.value) : 99999)}
+					/>
+				</label>
 			</div>
 
-			{currentBook && (
-				<>
-					<div className="setting-group">
-						<label>Mode</label>
-						<select value={mode} onChange={(e) => setMode(e.target.value)}>
-							<option value="translated">📄 Chỉ bản dịch</option>
-							<option value="bilingual">🌐 Song ngữ (gốc + dịch)</option>
-						</select>
-					</div>
+			<div className="setting-group">
+				<label>
+					Output path or filename
+					<input
+						value={outputPath}
+						onChange={(event) => setOutputPath(event.target.value)}
+						placeholder={`Default: ${selectedBook.title || "untitled"} - ${selectedBook.author || "unknown"}.${format}`}
+					/>
+				</label>
+				<p className="hint">Leave empty to use the backend generated name.</p>
+			</div>
 
-					<div className="setting-group">
-						<label>Format</label>
-						<select value={format} onChange={(e) => setFormat(e.target.value)}>
-							<option value="txt">📃 .txt</option>
-							<option value="epub">📚 .epub</option>
-						</select>
-					</div>
+			<button className="btn-primary" onClick={() => void handleExport()} disabled={exporting}>
+				{exporting ? "Exporting…" : "Export book"}
+			</button>
 
-					<div className="setting-group" style={{ display: "flex", gap: 12 }}>
-						<label>
-							From Chapter:
-							<input
-								type="number"
-								min={1}
-								value={chapterStart}
-								onChange={(e) => setChapterStart(parseInt(e.target.value) || 1)}
-								style={{ width: 60, marginLeft: 4 }}
-							/>
-						</label>
-						<label>
-							To Chapter:
-							<input
-								type="number"
-								min={1}
-								value={chapterEnd >= 99999 ? "" : chapterEnd}
-								placeholder="End"
-								onChange={(e) =>
-									setChapterEnd(
-										e.target.value ? parseInt(e.target.value) : 99999,
-									)
-								}
-								style={{ width: 60 }}
-							/>
-						</label>
-					</div>
-
-					<div className="setting-group">
-						<label>Output filename (optional)</label>
-						<input
-							type="text"
-							placeholder={`Default: ${currentBook.title || "untitled"} - ${currentBook.author || "unknown"}.${format}`}
-							value={outputPath}
-							onChange={(e) => setOutputPath(e.target.value)}
-						/>
-						<p className="hint">Leave empty for auto-generated name.</p>
-					</div>
-
-					<button
-						className="btn-primary"
-						onClick={handleExport}
-						disabled={exporting}
-					>
-						{exporting ? "⏳ Exporting..." : "📦 Export"}
-					</button>
-
-					{error && (
-						<div className="error-banner" style={{ marginTop: 12 }}>
-							{error}
-						</div>
-					)}
-					{result && (
-						<div className="success-banner" style={{ marginTop: 12 }}>
-							✅ Exported: {result}
-						</div>
-					)}
-				</>
-			)}
+			{error && <div className="error-banner">{error}</div>}
+			{result && <div className="success-banner">Exported: {result}</div>}
 		</div>
 	);
 }

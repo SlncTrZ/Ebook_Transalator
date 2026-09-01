@@ -39,3 +39,5 @@ Thumbs.db
 *.db-shm
 covers/
 temp/
+frontend/src-tauri/binaries/*
+!frontend/src-tauri/binaries/.gitkeep

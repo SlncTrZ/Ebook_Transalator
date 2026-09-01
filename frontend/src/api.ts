@@ -6,6 +6,7 @@ export interface Book {
 	file_path: string;
 	title: string;
 	author: string;
+	localized_title: string;
 	source_lang: string;
 	target_lang: string;
 	category: string;
@@ -36,6 +37,20 @@ export interface ProgressData {
 	done: number;
 	failed: number;
 	status: string;
+}
+
+export interface MetadataResult {
+	title: string;
+	author: string;
+	source_lang: string;
+	target_lang: string;
+	localized_title: string;
+	category: string;
+	description: string;
+	style_notes?: string;
+	confidence: number;
+	sources: string[];
+	from_knowledge: boolean;
 }
 
 export interface CategoryInfo {
@@ -91,6 +106,41 @@ export const updateBook = (id: number, data: Partial<Book>) =>
 export const deleteBook = (id: number) =>
 	request<{ ok: boolean }>(`/books/${id}`, { method: "DELETE" });
 
+export const researchBook = (
+	bookId: number,
+	vendor: string,
+	apiKey: string,
+	model: string,
+	userFeedback = "",
+	forceSearch = false,
+) =>
+	request<MetadataResult>(`/books/${bookId}/research`, {
+		method: "POST",
+		body: JSON.stringify({
+			vendor,
+			api_key: apiKey,
+			model,
+			user_feedback: userFeedback,
+			force_search: forceSearch,
+		}),
+	});
+
+export const confirmMetadata = (
+	bookId: number,
+	data: {
+		title: string;
+		author: string;
+		localized_title: string;
+		source_lang: string;
+		target_lang: string;
+		category: string;
+	},
+) =>
+	request<{ ok: boolean }>(`/books/${bookId}/confirm-metadata`, {
+		method: "POST",
+		body: JSON.stringify(data),
+	});
+
 // Chunks
 export const listChunks = (bookId: number, status?: string) => {
 	const qs = status ? `?status=${status}` : "";
@@ -129,7 +179,34 @@ export interface Vendor {
 	docs_url: string;
 }
 
-export const startTranslate = (
+export interface TranslationStartResponse {
+	book_id: number;
+	job_id: number;
+	status: "started";
+	mode: "standard" | "agentic";
+}
+
+function buildTranslationPayload(
+	filePath: string,
+	vendor: string,
+	apiKey: string,
+	model: string,
+	category: string,
+	chapterStart: number,
+	chapterEnd: number,
+) {
+	return {
+		file_path: filePath,
+		vendor,
+		api_key: apiKey,
+		model,
+		category,
+		chapter_start: chapterStart,
+		chapter_end: chapterEnd,
+	};
+}
+
+export const startStandardTranslation = (
 	filePath: string,
 	vendor: string,
 	apiKey: string,
@@ -137,20 +214,44 @@ export const startTranslate = (
 	category: string,
 	chapterStart = 0,
 	chapterEnd = 99999,
-	agentic = false,
 ) =>
-	request<{ book_id: number; status: string }>("/translate/start", {
+	request<TranslationStartResponse>("/translate/start", {
 		method: "POST",
-		body: JSON.stringify({
-			file_path: filePath,
-			vendor,
-			api_key: apiKey,
-			model,
-			category,
-			chapter_start: chapterStart,
-			chapter_end: chapterEnd,
-			agentic,
-		}),
+		body: JSON.stringify(
+			buildTranslationPayload(
+				filePath,
+				vendor,
+				apiKey,
+				model,
+				category,
+				chapterStart,
+				chapterEnd,
+			),
+		),
+	});
+
+export const startAgenticTranslation = (
+	filePath: string,
+	vendor: string,
+	apiKey: string,
+	model: string,
+	category: string,
+	chapterStart = 0,
+	chapterEnd = 99999,
+) =>
+	request<TranslationStartResponse>("/translate/agentic", {
+		method: "POST",
+		body: JSON.stringify(
+			buildTranslationPayload(
+				filePath,
+				vendor,
+				apiKey,
+				model,
+				category,
+				chapterStart,
+				chapterEnd,
+			),
+		),
 	});
 
 export const cancelTranslate = () =>
@@ -158,6 +259,8 @@ export const cancelTranslate = () =>
 
 export const translateProgress = (
 	bookId: number,
+	chapterStart: number,
+	chapterEnd: number,
 	onProgress: (data: ProgressData) => void,
 	onComplete: () => void,
 	onError: (err: string) => void,
@@ -167,7 +270,9 @@ export const translateProgress = (
 	const poll = async () => {
 		if (cancelled) return;
 		try {
-			const data = await request<ProgressData>(`/translate/status/${bookId}`);
+			const data = await request<ProgressData>(
+				`/translate/status/${bookId}?chapter_start=${chapterStart}&chapter_end=${chapterEnd}`,
+			);
 			onProgress(data);
 			if (data.status === "done" || data.status === "failed") {
 				onComplete();
@@ -186,8 +291,26 @@ export const translateProgress = (
 };
 
 // Export
-export const exportBook = (bookId: number) =>
-	request<{ path: string }>(`/export/${bookId}`, { method: "POST" });
+export const exportBook = (
+	bookId: number,
+	options: {
+		output_path?: string;
+		mode?: "translated" | "bilingual";
+		format?: "txt" | "epub";
+		chapter_start?: number;
+		chapter_end?: number;
+	} = {},
+) =>
+	request<{ path: string; mode: string; format: string }>(`/export/${bookId}`, {
+		method: "POST",
+		body: JSON.stringify({
+			output_path: options.output_path ?? "",
+			mode: options.mode ?? "translated",
+			format: options.format ?? "txt",
+			chapter_start: options.chapter_start ?? 1,
+			chapter_end: options.chapter_end ?? 99999,
+		}),
+	});
 
 // Connection test
 export const testConnection = (vendor: string, apiKey: string, model: string) =>
@@ -228,5 +351,26 @@ export const getReaderChunks = (
 	request<{ total: number; chapters: number[]; chunks: ReaderChunk[] }>(
 		`/books/${bookId}/reader?chapter_start=${chapterStart}&chapter_end=${chapterEnd}&status_filter=${statusFilter}`,
 	);
+export const updateChunkTranslation = (chunkId: number, translatedText: string) =>
+	request<{ ok: boolean; chunk_id: number }>(`/chunks/${chunkId}`, {
+		method: "PATCH",
+		body: JSON.stringify({ translated_text: translatedText }),
+	});
+
+export const rememberChunkTranslation = (chunkId: number, translatedText: string) =>
+	request<{ ok: boolean; chunk_id: number; stored: string }>(
+		`/chunks/${chunkId}/translation-memory`,
+		{
+			method: "POST",
+			body: JSON.stringify({ translated_text: translatedText }),
+		},
+	);
+
+export const requeueChunk = (chunkId: number) =>
+	request<{ ok: boolean; chunk_id: number; status: string }>(
+		`/chunks/${chunkId}/requeue`,
+		{ method: "POST" },
+	);
+
 export const promptPreview = (category: string) =>
 	request<{ category: string; prompt: string }>(`/prompt-preview/${category}`);

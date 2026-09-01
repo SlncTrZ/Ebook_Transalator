@@ -1,6 +1,6 @@
 [project]
 name = "ebook-translator"
-version = "0.1.0"
+version = "0.2.0"
 description = "E-book translation tool with caching, error recovery, and glossary injection"
 requires-python = ">=3.12"
 dependencies = [
@@ -16,6 +16,9 @@ dependencies = [
   "Pillow>=10.3",
   "click>=8.1",
   "rich>=13.7",
+  "fastapi>=0.115",
+  "uvicorn>=0.30",
+  "python-multipart>=0.0.9",
 ]
 
 [project.scripts]

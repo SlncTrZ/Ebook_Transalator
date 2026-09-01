@@ -38,6 +38,7 @@ class Book:
     file_path: str = ""
     title: str = ""
     author: str = ""
+    localized_title: str = ""
     source_lang: str = "en"
     target_lang: str = "vi"
     category: BookCategory = BookCategory.GENERAL
@@ -80,6 +81,7 @@ class CacheEntry:
 
     id: int | None = None
     content_hash: str = ""
+    context_hash: str = ""
     source_lang: str = "en"
     target_lang: str = "vi"
     model: str = ""
