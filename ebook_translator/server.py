@@ -547,6 +547,68 @@ async def requeue_chunk(chunk_id: int) -> dict:
     return {"ok": True, "chunk_id": chunk_id, "status": "pending"}
 
 
+@app.get("/api/books/{book_id}/qa")
+async def book_qa(
+    book_id: int,
+    chapter_start: int = 1,
+    chapter_end: int = 99999,
+) -> dict:
+    """Run deterministic QA over translated chunks in the requested scope."""
+    from ebook_translator.translator.qa import check_translation
+
+    d = _get_db()
+    book = await d.get_book(book_id)
+    if book is None:
+        raise HTTPException(status_code=404, detail="Book not found")
+
+    glossary = await d.get_glossary(book_id)
+    sql = (
+        "SELECT id, chapter_idx, paragraph_idx, original_text, translated_text, status "
+        "FROM chunks WHERE book_id = ? AND translated_text IS NOT NULL"
+    )
+    params: list[int] = [book_id]
+    if chapter_end < 99999 or chapter_start > 1:
+        sql += " AND chapter_idx + 1 >= ? AND chapter_idx + 1 <= ?"
+        params.extend([chapter_start, chapter_end])
+    sql += " ORDER BY chapter_idx, paragraph_idx"
+    cursor = await d.conn.execute(sql, params)
+    rows = await cursor.fetchall()
+
+    chunk_results: list[dict] = []
+    issue_count = 0
+    error_count = 0
+    warning_count = 0
+    for row in rows:
+        result = check_translation(
+            row["original_text"], row["translated_text"] or "", glossary
+        )
+        issues = [issue.__dict__ for issue in result.issues]
+        if not issues:
+            continue
+        issue_count += len(issues)
+        error_count += sum(issue["severity"] == "error" for issue in issues)
+        warning_count += sum(issue["severity"] == "warning" for issue in issues)
+        chunk_results.append(
+            {
+                "chunk_id": row["id"],
+                "chapter_idx": row["chapter_idx"],
+                "paragraph_idx": row["paragraph_idx"],
+                "passed": result.passed,
+                "issues": issues,
+            }
+        )
+
+    return {
+        "book_id": book_id,
+        "checked_chunks": len(rows),
+        "issue_chunks": len(chunk_results),
+        "issues": issue_count,
+        "errors": error_count,
+        "warnings": warning_count,
+        "chunks": chunk_results,
+    }
+
+
 @app.get("/api/books/{book_id}/reader")
 async def reader_chunks(
     book_id: int,

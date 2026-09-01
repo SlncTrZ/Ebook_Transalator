@@ -19,12 +19,14 @@ from ebook_translator.db.database import Database
 from ebook_translator.models import BookCategory, CacheEntry, Chunk, GlossaryEntry
 from ebook_translator.translator.adapters import VENDORS
 from ebook_translator.translator.cache_key import prompt_fingerprint
+from ebook_translator.translator.context import ContextBuilder
 from ebook_translator.translator.gateway import LLMConfig, LLMGateway
 from ebook_translator.translator.metrics import (
     record_cache_hit,
     record_translation_memory_hit,
 )
 from ebook_translator.translator.prompts import get_system_prompt
+from ebook_translator.translator.qa import check_translation
 
 logger = logging.getLogger(__name__)
 
@@ -78,19 +80,29 @@ class TranslationPipeline:
             )
         )
         self._book_categories: dict[int, BookCategory] = {}
+        self._context_builder = ContextBuilder(db)
 
     async def close(self) -> None:
         pass
 
-    def _build_user_prompt(self, chunk: Chunk, glossary: list[GlossaryEntry]) -> str:
-        prompt = chunk.original_text
+    def _build_user_prompt(
+        self,
+        chunk: Chunk,
+        glossary: list[GlossaryEntry],
+        context_text: str = "",
+    ) -> str:
+        sections: list[str] = []
+        if context_text:
+            sections.append(context_text)
         if glossary:
             terms = "\n".join(
-                f"{g.source_term} -> {g.target_term.title() if g.target_term.islower() else g.target_term}"
-                for g in glossary
+                f"{g.source_term} -> {g.target_term}" for g in glossary
             )
-            prompt = f"[Glossary - use these terms EXACTLY, they are already capitalized]\n{terms}\n\n[Text]\n{chunk.original_text}"
-        return prompt
+            sections.append(
+                "[Glossary - use target terms EXACTLY as written]\n" + terms
+            )
+        sections.append(f"[Text]\n{chunk.original_text}")
+        return "\n\n".join(sections)
 
     async def _resolve_category(self, book_id: int) -> BookCategory:
         """Resolve category from explicit config or the persisted book, then cache it."""
@@ -114,13 +126,14 @@ class TranslationPipeline:
         chunk: Chunk,
         glossary: list[GlossaryEntry],
         category: BookCategory,
+        context_text: str = "",
     ) -> list[dict]:
         system = get_system_prompt(
             category,
             source_lang=self._config.source_lang,
             target_lang=self._config.target_lang,
         )
-        user = self._build_user_prompt(chunk, glossary)
+        user = self._build_user_prompt(chunk, glossary, context_text)
         return [
             {"role": "system", "content": system},
             {"role": "user", "content": user},
@@ -146,7 +159,8 @@ class TranslationPipeline:
 
         # Step 2: exact-response cache is isolated by the complete prompt context.
         category = await self._resolve_category(chunk.book_id)
-        messages = self._build_messages(chunk, glossary, category)
+        context = await self._context_builder.build_for_chunk(chunk)
+        messages = self._build_messages(chunk, glossary, category, context.render())
         context_hash = prompt_fingerprint(messages)
         cached = await self._db.get_cached(
             content_hash=chunk.content_hash,
@@ -180,6 +194,11 @@ class TranslationPipeline:
             raise RuntimeError(
                 f"Translation failed after {self._config.max_retries} retries"
             )
+
+        qa = check_translation(chunk.original_text, result, glossary)
+        for issue in qa.issues:
+            log = logger.error if issue.severity == "error" else logger.warning
+            log("QA %s for hash=%s: %s", issue.code, chunk.content_hash[:12], issue.message)
 
         # Step 4: Save to cache
         cache_entry = CacheEntry(

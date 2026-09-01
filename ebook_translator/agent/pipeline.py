@@ -20,6 +20,7 @@ from ebook_translator.db.database import Database
 from ebook_translator.models import CacheEntry, Chunk, GlossaryEntry
 from ebook_translator.agent.validator import check_glossary_terms, build_retry_prompt
 from ebook_translator.translator.cache_key import prompt_fingerprint
+from ebook_translator.translator.context import ContextBuilder
 from ebook_translator.translator.gateway import LLMConfig, LLMGateway
 from ebook_translator.translator.metrics import (
     record_cache_hit,
@@ -246,7 +247,8 @@ async def translate_agent_with_validation(
         logger.info("[Translate] Translation Memory HIT %s", chunk.content_hash[:12])
         return remembered
 
-    # Build context
+    # Build bounded long-form context from neighboring canonical chunks.
+    neighborhood = await ContextBuilder(db).build_for_chunk(chunk)
     context = (
         f"[Book Info]\nTitle: {ctx.title}\nAuthor: {ctx.author}\n"
         f"Category: {ctx.category}\n"
@@ -256,6 +258,9 @@ async def translate_agent_with_validation(
         context += f"Summary: {ctx.book_summary}\n"
     if ctx.style_notes:
         context += f"Style: {ctx.style_notes}\n"
+    rendered_neighborhood = neighborhood.render()
+    if rendered_neighborhood:
+        context += f"\n{rendered_neighborhood}\n"
 
     # Glossary terms
     all_terms: list[dict] = []
