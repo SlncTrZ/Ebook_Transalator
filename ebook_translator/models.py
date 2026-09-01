@@ -47,6 +47,13 @@ class Book:
     done_chunks: int = 0
     failed_chunks: int = 0
 
+    def __post_init__(self) -> None:
+        if not isinstance(self.category, BookCategory):
+            try:
+                self.category = BookCategory(self.category)
+            except ValueError:
+                self.category = BookCategory.GENERAL
+
 
 @dataclass
 class Chunk:

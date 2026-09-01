@@ -8,9 +8,10 @@ from __future__ import annotations
 import logging
 from dataclasses import dataclass
 
+import httpx
 from tenacity import (
     AsyncRetrying,
-    retry_if_exception_type,
+    retry_if_exception,
     stop_after_attempt,
     wait_exponential,
 )
@@ -59,10 +60,14 @@ class TranslationConfig:
                 self.category = BookCategory.GENERAL
 
 
-_RETRY_EXCEPTIONS = (
-    # httpx HTTP status errors
-    Exception,  # catch-all for API errors
-)
+def _is_retryable_exception(error: BaseException) -> bool:
+    """Retry transient transport/rate/server failures; fail fast on permanent 4xx."""
+    if isinstance(error, (httpx.TimeoutException, httpx.NetworkError, httpx.RemoteProtocolError)):
+        return True
+    if isinstance(error, httpx.HTTPStatusError):
+        status = error.response.status_code
+        return status in {408, 425, 429} or 500 <= status <= 599
+    return False
 
 
 class TranslationPipeline:
@@ -179,7 +184,7 @@ class TranslationPipeline:
         async for attempt in AsyncRetrying(
             stop=stop_after_attempt(self._config.max_retries),
             wait=wait_exponential(multiplier=1, min=1, max=16),
-            retry=retry_if_exception_type(_RETRY_EXCEPTIONS),
+            retry=retry_if_exception(_is_retryable_exception),
         ):
             with attempt:
                 if attempt.retry_state.attempt_number > 1:
