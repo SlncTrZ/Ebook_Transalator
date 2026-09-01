@@ -2,7 +2,7 @@
 
 Công cụ dịch E-book local-first hướng tới một **Translation Workbench**: research, Human-in-the-Loop, translation, inspection, correction, resume và export.
 
-> **Project status:** v1.0 candidate / internal beta. Core translation, Agentic/Standard routing, unified LLM gateway, persisted resumable jobs, deterministic QA, HITL, Translation Memory, source-preserving EPUB export, parser hardening và workbench UI đều đã triển khai và có regression coverage. Release blockers còn lại chủ yếu là frontend/native build environment, Rust/Tauri packaging verification và real-world corpus/stress testing. Xem [`MASTER_PLAN.md`](MASTER_PLAN.md) để biết release plan hiện hành.
+> **Project status:** v1.0 candidate / internal beta. Core translation, Standard/Agentic routing, unified LLM gateway, resumable persisted jobs, deterministic QA, HITL, Translation Memory, source-preserving EPUB export, parser hardening, workbench UI và Windows NSIS desktop packaging đều đã được triển khai/verify. Việc còn lại trước `v1.0-rc1` là full packaged pipeline validation bằng sách thật. Xem [`MASTER_PLAN.md`](MASTER_PLAN.md) và [`progress.md`](progress.md).
 
 
 ## Tính năng
@@ -82,8 +82,10 @@ ebook_translator/
 - Production npm dependency audit (`--omit=dev`): **0 vulnerabilities** at the latest verified checkpoint.
 - Python sidecar: build + startup/shutdown smoke test **passing**.
 - Rust stable toolchain: verified locally with `rustc 1.98.0` / `cargo 1.98.0`. Linux `cargo check` now reaches native Tauri system dependencies and is blocked by missing `glib-2.0` development libraries on this host.
-- Full Tauri installer/package verification is now explicitly assigned to the **Windows release environment**. Linux remains a development/test host and is no longer authoritative for Gate 2/4 desktop packaging.
-- See [`WINDOWS_RELEASE.md`](WINDOWS_RELEASE.md) for the Windows prerequisites, one-command build script, NSIS-first strategy, and packaged smoke-test checklist.
+- Windows Gate 2: **PASS** on `x86_64-pc-windows-msvc` — `cargo check --locked`, Tauri release compile, NSIS bundle and silent install all verified.
+- Packaged runtime smoke: **PASS** for app launch, backend HTTP 200, and sidecar shutdown/port release after lifecycle fix.
+- Gate 4 remains open only for full real-book workflow validation: import → Research/HITL → translate → interrupt/resume → QA/edit/TM → export → relaunch persistence.
+- See [`WINDOWS_RELEASE.md`](WINDOWS_RELEASE.md) for the authoritative Windows release procedure and [`progress.md`](progress.md) for the latest evidence.
 
 ## Project documents
 

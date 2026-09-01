@@ -83,10 +83,18 @@ Rules:
 
 ### Release blockers / not yet verified
 
-- `npm run build` is blocked on the current development host by missing npm optional native bindings (`@rolldown/binding-linux-x64-gnu` and the Tauri CLI native package) while the host is running an unsupported Node 26 alpha build.
-- Rust/Cargo are not installed on the current host, so `cargo check`, `tauri build`, and installer creation are not yet verified.
-- Real-world corpus/stress testing across diverse EPUB/TXT books is not yet complete.
-- Desktop installer lifecycle still needs end-to-end verification: launch, backend readiness, sidecar shutdown, port behavior, storage paths, migration, and packaged smoke test.
+Windows desktop packaging is no longer a blocker. Gate 2 has been verified on the authoritative Windows host (`truon@192.168.1.171`, `H:\Develop\Ebook_Transalator`): Rust MSVC, `cargo check --locked`, frontend production build, Tauri release compile, NSIS bundle, silent install, packaged launch, backend HTTP readiness, and sidecar shutdown/port release all passed.
+
+The only remaining blocker before `v1.0-rc1` is **full packaged real-book pipeline validation**:
+
+- import representative TXT + EPUB;
+- Research/HITL;
+- Standard/Agentic small-range translation;
+- interrupt/relaunch/resume;
+- QA/manual correction/Translation Memory promotion;
+- TXT/EPUB export + reopen;
+- persistence across relaunch;
+- record release evidence.
 
 ### Remaining architecture / product maturity debt
 
@@ -535,7 +543,7 @@ npm audit --omit=dev: 0 vulnerabilities
 
 Host-specific note: `/mnt/pc-dev` does not permit npm to create symlinks, so `npm ci` must use `--no-bin-links` and local non-committed executable wrappers are needed under `node_modules/.bin` for npm scripts on this host. Do not change `package.json` or application source to encode this filesystem workaround.
 
-### 10.2 Gate 2 — Windows Rust / Tauri Verification — ACTIVE RELEASE GATE
+### 10.2 Gate 2 — Windows Rust / Tauri Verification — VERIFIED
 
 **Windows is now the authoritative desktop release environment.** Linux remains useful for backend/frontend development and automated tests, but Linux GTK/WebKit packaging is not a v1.0 blocker.
 
@@ -565,18 +573,26 @@ NSIS installer first
 MSI optional after NSIS passes
 ```
 
-Required Gate 2 evidence:
+Verified Gate 2 evidence on 2026-09-01:
 
 ```text
-pytest PASS
-npm ci PASS
-npm run build PASS
+Node 24.18.0
+Python 3.12.0
+rustc/cargo 1.98.0 x86_64-pc-windows-msvc
+Visual C++ Build Tools + Windows SDK usable
+WebView2 Runtime present
+frontend production build PASS
 Windows sidecar .exe generated
 cargo check --locked PASS
-npx tauri build --bundles nsis PASS
+Tauri NSIS bundle PASS
+silent installer exit 0
+packaged app launch PASS
+/api/vendors HTTP 200
+sidecar cleanup PASS
+port 8080 released after app exit
 ```
 
-The previous Linux `glib-2.0` blocker is retained only as host evidence; it no longer blocks v1.0 because Linux is not the authoritative packaging target.
+A packaged smoke run exposed and then closed an orphan-sidecar bug in commit `02e86bc` (`fix: terminate desktop sidecar on app exit`). The previous Linux `glib-2.0` blocker remains host evidence only and does not block v1.0.
 
 Verify:
 
@@ -649,11 +665,11 @@ Acceptance:
 - no silent user-edit overwrite;
 - errors remain actionable rather than becoming fake completion.
 
-### 10.4 Gate 4 — Windows Packaged Desktop Smoke Test
+### 10.4 Gate 4 — Windows Packaged Desktop Smoke Test — BASIC LIFECYCLE VERIFIED / FULL PIPELINE PENDING
 
-Run this gate only against the Windows installer produced by Gate 2. Use a clean Windows 10/11 machine or clean Windows VM.
+Basic packaged lifecycle is verified: NSIS install, launch, backend readiness, graceful app exit, sidecar termination, port release, and clean relaunch all passed.
 
-Authoritative checklist lives in [`WINDOWS_RELEASE.md`](WINDOWS_RELEASE.md).
+What remains is the user-facing full pipeline on representative real books. Authoritative checklist lives in [`WINDOWS_RELEASE.md`](WINDOWS_RELEASE.md).
 
 Verify end-to-end:
 

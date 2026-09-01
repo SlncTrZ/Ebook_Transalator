@@ -1,5 +1,7 @@
 # Coder 2 — Job Reliability & Persistence Lane
 
+> **Status: COMPLETED / ARCHIVED (2026-09-01).** Persisted job state machine, interrupted recovery, range-safe resume, attempt history and diagnostics were implemented and integrated. This file is retained as historical assignment evidence, not an active lane.
+
 Project: `Ebook_Transalator`
 
 This file is self-contained. Follow it as the authoritative assignment for this lane.

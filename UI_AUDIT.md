@@ -1,6 +1,6 @@
 # UI Audit — Translation Workbench Migration
 
-Status: implementation baseline for P1 UI stages A/B.
+Status: **IMPLEMENTED / historical audit baseline**. The workbench migration described here was completed by 2026-09-01. Current UI truth lives in `README.md`, `MASTER_PLAN.md`, and the frontend source.
 
 ## Current component map
 
@@ -13,7 +13,7 @@ Status: implementation baseline for P1 UI stages A/B.
 - `ExportTab.tsx`: export mode/format/range.
 - `Settings.tsx`: provider/model/key configuration.
 
-## Current UX debt
+## Historical UX debt that drove the migration
 
 1. Navigation is feature-tab centric instead of book-workflow centric.
 2. Book context disappears when moving between tools.
@@ -26,7 +26,7 @@ Status: implementation baseline for P1 UI stages A/B.
 9. Sidebar consumes space without providing active-book operational context.
 10. Progress metrics are separated from inspection and correction workflow.
 
-## Target shell
+## Implemented shell
 
 ```text
 App rail | Book/workflow navigation | Main workspace | Inspector
@@ -34,7 +34,7 @@ App rail | Book/workflow navigation | Main workspace | Inspector
                                             +-- persistent job/status footer
 ```
 
-The first implementation step keeps existing feature components but mounts them inside a workbench shell. This reduces migration risk while allowing later component-by-component replacement.
+The implemented shell keeps the workflow explicit: Library → Translate → Inspect → Glossary → Export → Settings, with persistent document/runtime context, dense dividers, compact metrics, consistent loading/empty/error states, and the Design Taste visual guardrails.
 
 ## State ownership
 

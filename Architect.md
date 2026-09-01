@@ -1,162 +1,269 @@
 # Kiến trúc Hệ thống: Ebook Translator
 
-> Tài liệu này mô tả **target architecture** và migration direction. Trạng thái implementation thực tế phải được đối chiếu với `README.md` và `MASTER_PLAN.md`. Nếu có xung đột, `MASTER_PLAN.md` là source of truth.
+> Snapshot kiến trúc đã triển khai, cập nhật 2026-09-01. `MASTER_PLAN.md` là source of truth cho release gates và thứ tự công việc. `Plan.md` và các handoff cũ chỉ còn giá trị lịch sử.
 
-## Current → Target Gap (2026-08-31)
+## 1. Product Architecture
 
-| Area | Current | Target |
-|---|---|---|
-| LLM calls | Standard dùng adapter; Agentic/Research còn gọi OpenAI-compatible HTTP trực tiếp | Một LLM Gateway duy nhất cho mọi workflow |
-| Orchestration | FastAPI `server.py` đang giữ nhiều workflow logic | Service/orchestration layer tách khỏi transport |
-| Progress | books counters + chunk COUNT + AgentContext cùng tồn tại | Một canonical job/chunk state model |
-| Agentic routing | Frontend/backend contract còn lệch | Explicit Standard/Agentic job commands |
-| EPUB export | Rebuild EPUB mới từ translated chunks | Preserve source spine/TOC/CSS/assets/metadata |
-| Recovery | Cache/resume theo chunk có nền tảng, background crash recovery chưa đầy đủ | Crash-safe persisted job recovery |
-| UI | Nhiều tab CRUD/flow rời rạc | Translation Workbench: navigator + bilingual workspace + inspector |
-
-## Sơ đồ Luồng (Target Core)
-
-```
-[Input File] → [Parser] → [Chunker] → [Cache Check] ──→ [AI Translate] → [Writer] → [Export]
-                   │            │           │                                      │
-                   │            │           ├── Hash match → [Skip] ───────────────┤
-                   │            │           │                                      │
-                   │            │           └── [Retry (3x, backoff)] ────────────┤
-                   │            │                                                  │
-              [Lỗi DRM]   [Quá dài → split câu]                                [.epub mới]
-              → báo lỗi
-```
-
-## Cấu trúc Layer (Target)
-
-### 1. Data Layer (SQLite — WAL mode)
-
-```python
-"""Database schema — Core tables only."""
-books:    id, file_path, title, author, source_lang, target_lang, category, status
-chunks:   id, book_id, chapter_idx, paragraph_idx, content_hash, original_text,
-          translated_text, status(pending|done|failed), token_count, error_log
-glossary: id, book_id, source_term, target_term, notes
-cache:    id, content_hash, source_lang, target_lang, model, translated_text, created_at
-```
-
-- **Chống nghẽn:** `PRAGMA journal_mode=WAL` + `aiosqlite` lock-free read
-- **Cache riêng bảng:** Tách biệt chunk data với cache, dễ xoá cache mà không ảnh hưởng dữ liệu dịch
-
-### 2. Chunking Engine
-
-- **Default:** 1 paragraph = 1 chunk
-- **Oversize protection:** nếu paragraph > 4000 tokens → split theo `.` / `!` / `?`
-- **Metadata:** mỗi chunk lưu `chapter_idx` + `paragraph_idx` → ghép lại đúng thứ tự
-- **Hash:** `sha256(original_text.encode())` — dùng làm key tra cache
-
-### 3. Translation Pipeline
-
-Target constraint: mọi model call phải đi qua `LLM Gateway → Vendor Adapter`. Agent modules không được tự ghép provider URL hoặc hard-code `/chat/completions`.
-
-
-```python
-async def translate_chunk(chunk, glossary, category):
-    """1 chunk → 1 API call. Có retry, có cache check."""
-
-    # Bước 1: Check cache
-    cached = await get_cached(chunk.content_hash, src, tgt, model)
-    if cached:
-        return cached
-
-    # Bước 2: Build prompt (glossary inject)
-    prompt = build_prompt(chunk.text, glossary, category)
-
-    # Bước 3: Call API (retry 3x, backoff)
-    for attempt in retry(stop=stop_after_attempt(3), wait=wait_exponential(multiplier=1, max=16)):
-        try:
-            result = await ai_client.translate(prompt)
-            break
-        except RateLimitError:
-            attempt.snooze()  # ExponentialBackoff
-        except APIConnectionError:
-            if attempt.retry_state.attempt_number == 3:
-                chunk.status = "failed"
-                await save_failed(chunk, error_log)
-
-    # Bước 4: Save cache + chunk
-    await save_cache(chunk.content_hash, result)
-    chunk.translated_text = result
-    chunk.status = "done"
-    await save_chunk(chunk)
-```
-
-### 4. Error Recovery
-
-Current implementation mới đạt một phần target này. Đặc biệt, process/background-task crash recovery và reconciliation của job state vẫn là hạng mục P1/P2 trong `MASTER_PLAN.md`.
-
-
-| Loại lỗi | Hành vi |
-|---|---|
-| **429 Rate Limit** | Backoff 1s → 4s → 16s. Sau 3 lần → skip + log |
-| **5xx Server Error** | Như trên |
-| **Connection Timeout** | Retry với timeout=60s. Lần 3 fail → skip |
-| **DRM file** | Báo lỗi rõ "File có DRM, không parse được" |
-| **Encoding (.txt)** | Thử utf-8 → fallback chardet → fallback cp1252. Vẫn fail → báo lỗi |
-| **Mất điện giữa chừng** | Chạy lại → check DB: chunk `done` → skip. Chỉ dịch `pending` + `failed` |
-
-### 5. Caching Policy (Fingerprinting)
-
-Exact-response cache hiện tại là nền tảng, nhưng target architecture tách rõ **cache**, **translation memory**, **glossary**, và **manual correction**; không được gộp các semantic khác nhau chỉ vì cùng giúp tái sử dụng bản dịch.
-
-
-```
-Key:   sha256(original_text + source_lang + target_lang + model)
-TTL:   ∞ (vĩnh viễn) — chỉ xoá khi anh clear cache tay
-Scope: Per-book? Không — global. Cùng 1 paragraph ở 2 cuốn sách khác nhau = dùng chung cache
-```
-
-- **Cache-first:** Luôn check cache trước khi gọi API
-- **Write-through:** Sau mỗi translate success → ghi cache ngay
-- **Invalidate:** Nếu đổi model → key khác → cache cũ không ảnh hưởng
-
----
-
-## Tech Stack
-
-Tech stack hiện tại được giữ theo nguyên tắc reuse-first. Không thêm Redis/Celery/Kafka/cloud database nếu chưa có bằng chứng SQLite/local orchestration không đáp ứng Scalability thực tế của desktop workload.
-
-
-| Layer | Công nghệ | Lý do |
-|---|---|---|
-| **Ngôn ngữ** | Python 3.12+ | Hệ sinh thái NLP + AI mạnh |
-| **Database** | SQLite + aiosqlite | Embedded, zero config, WAL chống lock |
-| **Parser EPUB** | ebooklib + BeautifulSoup | Chuẩn, bảo trì tốt |
-| **Parser TXT** | chardet | Auto-detect encoding |
-| **AI Client** | httpx (async) + tenacity | Async call + retry pattern |
-| **Cache** | hash (sha256) + bảng SQLite | Không cần Redis, đủ nhanh cho local |
-| **Export** | ebooklib | Current: TXT + generated EPUB; Target P1: preserve source EPUB spine/TOC/CSS/assets/metadata |
-| **Frontend** | Tauri 2.x + React (TS) | Desktop workbench; packaging vẫn chưa hoàn tất |
-| **Error Handling** | tenacity + logging | Retry exponential backoff |
-| **Token Tracking** | tiktoken (OpenAI) | Đếm token trước khi gửi, tránh oversize |
-
----
-
-## UI Architecture Target
-
-Core product surface không được trở thành SaaS dashboard/card soup. Target là desktop workbench:
+Ebook Translator là **local-first long-form translation workbench**:
 
 ```text
-Book Navigator | Original / Translation Workspace | Inspector
----------------------------------------------------------------
-Job status · model · cache hits · tokens · latency · errors
+Import
+→ Parse & Understand
+→ Research / HITL
+→ Translate
+→ Inspect / Correct
+→ Resume safely
+→ Export
 ```
 
-Design implementation phải đọc `.agents/skills/design-taste-frontend/SKILL.md`, nhưng project-specific workflow rules trong `MASTER_PLAN.md` override các decorative/landing-page biases của skill.
+AI làm phần nặng; người dùng giữ quyền kiểm soát terminology, context, quality và final text.
 
-## So sánh trước và sau Audit
+## 2. Runtime Topology
 
-| Hạng mục | Cũ (bloated) | Mới (Ngon-Bổ-Rẻ) |
-|---|---|---|
-| Cover AI | Phase 1 | Phase 4 (tuỳ chọn) |
-| Web Search + HITL | Phase 2 | Phase 3 (tuỳ chọn) |
-| Cache | Không có | Phase 1 — bắt buộc |
-| Error recovery | Không có | Phase 1 — bắt buộc |
-| Chunking | Không rõ | Paragraph, có oversize split |
-| Frontend | Electron (nặng) | Tauri (nhẹ) |
-| Guideline | AI-generated, thiếu thực tế | Audit-driven, tập trung vào core value |
+```text
+Tauri v2 desktop shell
+        │
+        ├── React/TypeScript workbench
+        │
+        └── Python FastAPI sidecar (127.0.0.1:8080)
+                    │
+                    ├── SQLite / WAL
+                    ├── Parser + Chunker
+                    ├── Research / HITL
+                    ├── LLM Gateway
+                    ├── Standard / Agentic pipelines
+                    ├── QA / Translation Memory
+                    └── Export engine
+```
+
+Windows `x86_64-pc-windows-msvc` là authoritative desktop release target. Linux vẫn dùng cho backend/frontend development và automated tests.
+
+## 3. Core Layers
+
+### 3.1 Import / Parsing
+
+- EPUB: `ebooklib` + BeautifulSoup.
+- TXT: strict UTF-8 first, BOM-aware handling, confidence-gated detection, cp1252 fallback.
+- CJK chapter/sentence splitting hỗ trợ punctuation không cần whitespace.
+- Upload/import có path sanitization, size limit và explicit errors.
+
+### 3.2 Canonical Chunk Identity
+
+Mỗi chunk có:
+
+```text
+book_id
+chapter_idx
+paragraph_idx
+segment_idx
+content_hash
+original_text
+translated_text
+status
+```
+
+`paragraph_idx` là identity của paragraph gốc; `segment_idx` chỉ biểu diễn các segment của paragraph quá dài. Exporter phải join segments theo `paragraph_idx + segment_idx` trước khi patch EPUB.
+
+### 3.3 SQLite State
+
+SQLite là persistent source of truth, WAL mode, `aiosqlite`.
+
+Các domain chính:
+
+```text
+books
+chunks
+glossary
+translation_cache
+translation_memory
+translation_jobs
+translation_job_attempts
+```
+
+Book counters chỉ là compatibility snapshot. Progress thật được aggregate trực tiếp từ chunks trong đúng scope chapter range.
+
+### 3.4 LLM Gateway
+
+Mọi model call phải đi qua:
+
+```text
+Workflow
+→ LLM Gateway
+→ Vendor Adapter
+→ Provider
+```
+
+Standard, Agentic và Research không được hard-code provider HTTP path riêng.
+
+Gateway hiện hỗ trợ OpenAI-compatible providers, Anthropic, Gemini và Ollama.
+
+### 3.5 Translation Pipelines
+
+Standard và Agentic dùng cùng các primitives:
+
+- category-aware prompting;
+- bounded neighboring context;
+- glossary injection;
+- Translation Memory lookup;
+- exact context-aware response cache;
+- transient-only retry policy;
+- deterministic QA;
+- persisted job lifecycle.
+
+Cache, Translation Memory, glossary và manual correction là bốn semantics khác nhau và không được gộp.
+
+### 3.6 Context Engine
+
+Context hiện tại được build từ canonical neighboring chunks trong cùng chapter:
+
+```text
+previous source
+previous completed translation
+current source
+next source
+```
+
+Context có budget hữu hạn và deterministic truncation. Chapter summary/entity registry/style memory sâu hơn là post-RC enhancement, không block v1.0.
+
+### 3.7 Deterministic QA
+
+QA hiện phát hiện tối thiểu:
+
+- missing translation;
+- glossary violation;
+- number mismatch;
+- identical/source residue;
+- abnormal length ratio.
+
+QA trả structured issue codes cho Reader/Inspect UI. Manual correction không tự động trở thành Translation Memory; promotion vào TM là action riêng.
+
+### 3.8 Job Reliability
+
+Persisted `translation_jobs` dùng explicit state machine:
+
+```text
+pending → running → done / failed / interrupted / paused / cancelled
+```
+
+Resume:
+
+- giữ nguyên logical job;
+- chỉ lấy `pending|failed` chunks;
+- giữ đúng chapter scope;
+- không dịch lại chunks `done`;
+- không persist API credentials;
+- có attempt history + diagnostics.
+
+Khi process restart, running jobs trở thành `interrupted` và running attempts được đóng thành failed attempt evidence.
+
+### 3.9 EPUB Fidelity
+
+Nếu source là EPUB thật, exporter patch source archive thay vì rebuild từ zero:
+
+- giữ CSS/assets/images;
+- giữ package/spine/TOC/navigation resources;
+- giữ non-document entries byte-for-byte;
+- patch các XHTML document cần dịch;
+- reconstruct segmented paragraphs trước khi patch.
+
+Source XHTML được parse XML-aware trong exporter.
+
+Known limitation: translated-only replacement hiện có thể làm mất inline markup bên trong chính translated paragraph. Đây là post-RC fidelity enhancement, không phải resource-loss bug.
+
+## 4. Desktop Lifecycle
+
+Tauri spawn Python backend bằng `tauri-plugin-shell` sidecar.
+
+`CommandChild` được giữ trong managed app state và bị terminate khi Tauri nhận `Exit` hoặc `ExitRequested`.
+
+Lý do: build Windows thực tế đã phát hiện sidecar orphan giữ port `8080` sau khi UI process kết thúc. Fix hiện đã verify trên packaged NSIS build:
+
+```text
+app exit
+→ backend process count = 0
+→ port 8080 listener count = 0
+```
+
+## 5. Desktop Storage
+
+Default SQLite path:
+
+```text
+~/.ebook_translator/library.db
+```
+
+`ET_DB_PATH` có thể override. Credentials không được persist trong repository hoặc DB job metadata.
+
+## 6. Frontend Architecture
+
+Workbench shell:
+
+```text
+Library → Translate → Inspect → Glossary → Export → Settings
+```
+
+Desktop layout:
+
+```text
+Workflow rail | Active workspace | Context / runtime inspector
+```
+
+Design rules:
+
+- dense desktop workbench, không card soup;
+- one accent color;
+- no purple/neon/glow;
+- compact status/progress metrics;
+- low motion;
+- clear loading/empty/error states;
+- API key session-only.
+
+## 7. Release Architecture
+
+Authoritative Windows release path:
+
+```text
+Node 22/24 stable
+Python 3.12+
+Rust stable x86_64-pc-windows-msvc
+Visual C++ Build Tools
+Windows SDK
+WebView2
+→ Python sidecar build
+→ cargo check --locked
+→ Tauri release build
+→ NSIS installer
+→ packaged smoke test
+```
+
+Verified 2026-09-01 on `truon@192.168.1.171`, repo `H:\Develop\Ebook_Transalator`:
+
+- Node 24.18.0;
+- Python 3.12.0;
+- rustc/cargo 1.98.0 MSVC;
+- frontend production build PASS;
+- `cargo check --locked` PASS;
+- NSIS build PASS;
+- silent install PASS;
+- packaged app launch PASS;
+- packaged `/api/vendors` returns HTTP 200;
+- sidecar shutdown / port release PASS after lifecycle fix.
+
+## 8. Remaining Before v1.0-rc1
+
+Không cần thêm feature mới.
+
+Còn đúng release validation:
+
+1. full packaged pipeline bằng sách thật;
+2. import TXT + EPUB;
+3. Research/HITL;
+4. Standard và/hoặc Agentic translation sample;
+5. interrupt/relaunch/resume;
+6. manual correction + TM promotion;
+7. QA inspection;
+8. TXT/EPUB export + reopen;
+9. persistence across relaunch;
+10. record release evidence và tag `v1.0-rc1` nếu pass.
+
+Sau RC mới quay lại server/service refactor, fuzzy TM, richer long-form context và deeper QA.

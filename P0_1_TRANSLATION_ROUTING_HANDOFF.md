@@ -3,7 +3,7 @@
 > Scope owner: junior implementation slice
 > Governing plan: `MASTER_PLAN.md`
 > Priority: P0
-> Status: READY FOR IMPLEMENTATION
+> Status: **COMPLETED / ARCHIVED** — explicit Standard/Agentic routing, full-book/range behavior and truthful start semantics were implemented and regression-covered before 2026-09-01. This file is retained as historical handoff evidence only.
 
 ## 1. Why
 

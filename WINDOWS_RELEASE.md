@@ -28,15 +28,23 @@ Install before running the release script:
 
 For MSI builds, Windows VBSCRIPT support may also be required. The first v1.0 verification target is NSIS to avoid making MSI-specific tooling a blocker.
 
-## One-command release build
+## Release build command
 
-From PowerShell at the repository root:
+On a normal Windows host where Visual C++ environment discovery works, run from PowerShell at the repository root:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\windows_release.ps1
 ```
 
-The script verifies the runtime/toolchain, creates a local `.release-venv`, installs build dependencies, runs backend tests, installs frontend dependencies, builds the frontend, builds the Python sidecar, runs `cargo check --locked`, then produces an NSIS installer with Tauri.
+On the verified `.171` host, initialize the Visual C++ Developer environment first because the existing Build Tools registration does not expose `link.exe` to a plain PowerShell session:
+
+```cmd
+call "C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\VC\Auxiliary\Build\vcvars64.bat"
+cd /d H:\Develop\Ebook_Transalator
+powershell -ExecutionPolicy Bypass -File .\scripts\windows_release.ps1
+```
+
+The script creates a local `.release-venv`, installs build dependencies, runs backend tests, installs frontend dependencies, builds the frontend, builds the Python sidecar, runs `cargo check --locked`, then produces an NSIS installer with Tauri.
 
 ## Expected gates
 
@@ -62,9 +70,47 @@ frontend/src-tauri/binaries/ebook-translator-backend-x86_64-pc-windows-msvc.exe
 
 Generated sidecar binaries remain ignored by Git.
 
+## Verified Windows evidence — 2026-09-01
+
+Authoritative host used:
+
+```text
+truon@192.168.1.171
+H:\Develop\Ebook_Transalator
+```
+
+Verified:
+
+```text
+Node 24.18.0
+Python 3.12.0
+rustc 1.98.0 / cargo 1.98.0
+host x86_64-pc-windows-msvc
+Visual C++ Build Tools + Windows SDK usable
+WebView2 Runtime present
+cargo check --locked PASS
+Tauri release compile PASS
+NSIS bundle PASS
+silent install exit 0
+installed app launch PASS
+packaged /api/vendors HTTP 200
+sidecar terminates after app exit
+port 8080 released after app exit
+clean relaunch HTTP 200
+```
+
+Installer produced:
+
+```text
+frontend\src-tauri\target\release\bundle\nsis\Ebook Translator_0.2.0_x64-setup.exe
+SHA256 43E928E99D2D518750F4E01B48E48D7438421EFE587FDDD81D0E6DC4E6739857
+```
+
+The initial packaged smoke exposed an orphan-sidecar bug. Commit `02e86bc` keeps the `CommandChild` in Tauri managed state and kills it on app exit; the rebuilt package verified `backend=0` and `port 8080=0` after desktop shutdown.
+
 ## Gate 4 packaged smoke test
 
-Do not tag `v1.0-rc1` immediately after the installer builds. Install the generated NSIS package on a clean Windows 10/11 machine or clean Windows VM and verify:
+Basic install/launch/backend/lifecycle behavior is already verified. Before tagging `v1.0-rc1`, complete the real-book workflow on the packaged Windows app:
 
 ```text
 1. Installer completes.

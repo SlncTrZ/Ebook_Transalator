@@ -1,6 +1,6 @@
 # Kế hoạch Triển khai: Ebook Translator (Historical Plan)
 
-> Tài liệu này là kế hoạch lịch sử ban đầu và được giữ để truy vết quyết định. **Không dùng file này làm roadmap điều hành hiện tại.** Roadmap, target architecture, acceptance gates và junior guardrails nằm trong [`MASTER_PLAN.md`](MASTER_PLAN.md).
+> Tài liệu này là kế hoạch lịch sử ban đầu và được giữ để truy vết quyết định. **Không dùng file này làm roadmap điều hành hiện tại.** Roadmap và release gates nằm trong [`MASTER_PLAN.md`](MASTER_PLAN.md). Tính đến 2026-09-01, Phase 1–3 đã được thay thế bởi implementation mạnh hơn đáng kể; desktop Windows NSIS build đã PASS và dự án chỉ còn full packaged pipeline validation trước `v1.0-rc1`.
 
 ## Mục tiêu ban đầu
 
@@ -63,6 +63,21 @@ Xây dựng công cụ dịch E-book tự động, bản địa hóa, cá nhân 
 - **Đóng dấu bản quyền** — watermark mờ
 
 ---
+
+## Outcome hiện tại — 2026-09-01
+
+Các mục lịch sử đã tiến hóa thành implementation hiện tại:
+
+```text
+paragraph cache → context-aware exact cache + explicit Translation Memory
+simple retry → transient/permanent provider error classification
+chunk resume → persisted job state machine + range-safe resume
+rebuild EPUB → source-preserving EPUB patching
+feature tabs → dense Translation Workbench
+Tauri scaffold → Windows NSIS package verified
+```
+
+Các feature lịch sử như Cover AI vẫn deferred và không block v1.0.
 
 ## Kỹ thuật xương sống (giữ lại)
 

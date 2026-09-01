@@ -1,170 +1,175 @@
-# Progress Report — 23/07/2026
+# Progress Report — 2026-09-01
 
-## Tổng quan
+## Trạng thái
 
-Hoàn thiện Ebook Translator từ Phase 1 (MVP CLI) lên Phase 3 (Agentic Pipeline + HITL + Multi-Vendor).
-Dự án đã có đủ core tính năng để chạy dịch thực tế.
+Ebook Translator đã đạt trạng thái **v1.0 candidate / internal beta**. Core architecture, translation workflows, recovery, QA, source-preserving export, workbench UI và Windows desktop packaging đều đã được triển khai và có regression evidence.
 
----
+Việc còn lại trước `v1.0-rc1` là **full packaged pipeline validation bằng sách thật**, không phải mở rộng feature.
 
-## Tính năng đã xây dựng
+## Hoàn thành
 
-### 1. Parser & Encoding
+### Core translation
 
-- [x] Parser `.epub` (ebooklib + BeautifulSoup)
-- [x] Parser `.txt` với **score-based encoding detection**: thử 9 encoding châu Á, chọn cái ít replacement chars nhất
-- [x] Fix: GB18030 cho tiếng Trung (chardet detect sai KOI8-U)
-- [x] Verified với Calibre: khớp **100% số paragraph** (12,428/12,428) trên 2 file Trung Quốc
+- [x] Explicit Standard / Agentic routing.
+- [x] Unified LLM Gateway cho Standard, Agentic và Research.
+- [x] Multi-vendor adapters: OpenAI-compatible, Anthropic, Gemini, Ollama.
+- [x] Category-aware prompting.
+- [x] Bounded neighboring translation context.
+- [x] Book-scoped glossary.
+- [x] Exact context-aware cache.
+- [x] User-approved Translation Memory tách riêng khỏi cache/manual correction.
+- [x] Transient-only retry policy; permanent provider errors fail fast.
 
-### 2. Agentic Pipeline (`agent/pipeline.py`)
+### Parser / chunk identity
 
-- [x] **Research Agent**: 1 lần duy nhất trên preview → sinh metadata + glossary → **dừng chờ duyệt**
-- [x] **Translate Agent**: Cache check + context injection (book info, glossary, style notes)
-- [x] **Deterministic Validation**: Regex check glossary terms — **chỉ check terms CÓ trong source text**, max 2 retries, không infinite loop
-- [x] Re-search: nếu AI không tự tin, search DuckDuckGo lần 2
+- [x] EPUB + TXT parsing.
+- [x] UTF-8/BOM/confidence-gated encoding handling.
+- [x] CJK chapter/sentence splitting.
+- [x] Stable `paragraph_idx` + `segment_idx` cho oversized paragraphs.
+- [x] Exporter reconstruct segments đúng paragraph identity.
 
-### 3. Multi-Vendor AI (`translator/adapters.py`)
+### QA / HITL
 
-- [x] 7 vendors: OpenAI, DeepSeek, Groq, Together, Ollama, Anthropic, Gemini
-- [x] Adapter pattern: OpenAI-compatible (chung) + Anthropic riêng + Gemini riêng + Ollama riêng
-- [x] Fetch live models từ API vendor
-- [x] Test & Save API key
-- [x] Fix: `base_url` luôn được fill từ vendor (không phụ thuộc model)
+- [x] Research + metadata HITL.
+- [x] User feedback / optional web verification.
+- [x] Deterministic QA structured issues.
+- [x] Glossary violation, missing translation, number mismatch, residue/identical text, length anomaly checks.
+- [x] Reader manual correction.
+- [x] Explicit save-to-Translation-Memory action.
+- [x] Chunk requeue.
 
-### 4. Prompt Routing (`translator/prompts.py`)
+### Job reliability
 
-- [x] 12 categories với style guide riêng + few-shot examples:
-  - Tiên hiệp → "hắn", Hán-Việt, trang trọng
-  - Võ hiệp → hào sảng, nội công, giang hồ
-  - Khoa học viễn tưởng → chính xác, kỹ thuật
-  - Kỳ ảo → ma pháp, huyền bí, sử thi
-  - Kinh dị → căng thẳng, hồi hộp
-  - Ngôn tình → lãng mạn, ngọt ngào
-  - Trinh thám → logic, manh mối
-  - Hài hước → dí dỏm, khôi hài
-  - Văn học, Lịch sử, Hiện đại, Tổng hợp
+- [x] Persisted translation job state machine.
+- [x] Interrupted-job recovery after restart.
+- [x] Range-safe resume.
+- [x] Resume same logical job.
+- [x] Completed chunks excluded from resume.
+- [x] Per-chunk attempt history.
+- [x] Job diagnostics.
+- [x] Credentials not persisted in jobs.
 
-### 5. Web Search (`agent/web_search.py`)
+### EPUB fidelity
 
-- [x] DuckDuckGo free search (không cần API key)
-- [x] AI knowledge first → DuckDuckGo fallback → LLM re-analyze
-- [x] Research Agent hướng dẫn search trang gốc Trung Quốc (qidian.com) để lấy category chính xác
+- [x] Source-preserving EPUB patching.
+- [x] Preserve CSS/assets/images/package/spine/TOC/navigation resources.
+- [x] Preserve non-document archive entries.
+- [x] XML-aware XHTML parsing in exporter.
+- [x] Complex generated release corpus round-trip test.
 
-### 6. Frontend (React + Tauri)
+### Frontend workbench
 
-- [x] **Library tab**: Import bằng path, upload file, preset test buttons, **🗑 xoá sách**
-- [x] **Translate tab**: Analyze Metadata → Confirm → Chapter range → Start/Cancel
-- [x] **Reader tab**: Song ngữ gốc/dịch, chapter range, status filter
-- [x] **Glossary tab**: CRUD từ điển, tự động lưu từ Research Agent
-- [x] **Export tab**: Mode (dịch/song ngữ), Format (txt/epub), Chapter range, custom filename
-- [x] **Settings tab**: Vendor selector, API key + Test & Save, Model selector, **🟢 Server Status**
-- [x] Fix: state persist trong localStorage (confirmed, models, api key, vendor)
+- [x] Library → Translate → Inspect → Glossary → Export → Settings workflow.
+- [x] Dense desktop workbench redesign using Design Taste guardrails.
+- [x] Truthful chunk progress.
+- [x] QA surfaced in Reader/Inspect.
+- [x] API key session-only.
+- [x] Backend startup GET retry for desktop startup race.
 
-### 7. Backend API
+### Automated validation
 
-- [x] RESTful: Books, Chunks, Glossary, Translate, Export, Vendors, Categories
-- [x] Polling progress (`GET /api/translate/status/{id}` thay SSE)
-- [x] AutoFormat pipeline: chuẩn hóa dấu câu, khoảng trắng, viết hoa, fix typo
+- [x] Backend regression suite: **81 passing tests**.
+- [x] Complex EPUB release-corpus test.
+- [x] 2,500-chunk progress/resume stress test.
+- [x] TypeScript compile PASS.
+- [x] Frontend production build PASS on Node 22/24 stable.
+- [x] Production npm audit (`--omit=dev`): 0 vulnerabilities at verified checkpoint.
+- [x] Python sidecar build + standalone smoke PASS.
 
-### 8. Bug Fixes
+## Windows desktop release evidence — 2026-09-01
 
-- [x] Validator: chỉ check terms CÓ trong source text (tránh false positive)
-- [x] `__post_init__`: set base_url luôn, không phụ thuộc model
-- [x] `total_chunks`: đếm live từ chunks table, không dùng books.done_chunks stale
-- [x] `localized_title`: lưu field riêng trong AgentContext
-- [x] Model: không ghi đè model user đã chọn
-- [x] Connection lost: polling thay SSE
-- [x] Chapter range filter trong _run_translation
-- [x] CORS: allow frontend dev server (port 5173)
-- [x] Parser: score-based encoding, giữ line-by-line (không gộp paragraph)
+Authoritative host:
 
----
-
-## Cấu trúc dự án hiện tại
-
-```
-ebook_translator/
-├── agent/
-│   ├── __init__.py
-│   ├── pipeline.py        # Research Agent + Translate Agent + Validation
-│   ├── validator.py        # Deterministic validation (Regex, không AI)
-│   └── web_search.py       # DuckDuckGo + LLM metadata extract
-├── db/
-│   └── database.py         # SQLite WAL + aiosqlite
-├── export/
-│   ├── epub_writer.py       # Export .epub giữ CSS
-│   └── export_engine.py     # Export engine: mode, format, range
-├── parsers/
-│   ├── base.py
-│   ├── epub_parser.py       # ebooklib
-│   └── txt_parser.py        # Score-based encoding detection
-├── translator/
-│   ├── adapters.py           # 7 vendors
-│   ├── pipeline.py           # Cache + retry
-│   └── prompts.py            # 12 categories + style guides
-├── utils/
-│   ├── autoformat.py         # Text cleanup
-│   └── chunker.py            # SHA-256 fingerprint + paragraph chunking
-├── models.py
-├── cli.py
-└── server.py                 # FastAPI (20+ endpoints)
-
-frontend/
-├── src/
-│   ├── components/
-│   │   ├── Library.tsx       # Import + Delete
-│   │   ├── TranslateView.tsx # Translate flow + progress
-│   │   ├── MetadataReview.tsx # Research + HITL
-│   │   ├── GlossaryEditor.tsx
-│   │   ├── Reader.tsx        # Song ngữ
-│   │   ├── ExportTab.tsx     # Export options
-│   │   └── Settings.tsx      # Vendor + API key + Model
-│   ├── api.ts
-│   ├── App.tsx
-│   └── App.css
+```text
+truon@192.168.1.171
+H:\Develop\Ebook_Transalator
+x86_64-pc-windows-msvc
 ```
 
----
+Verified:
 
-## API Endpoints
+- [x] Node 24.18.0.
+- [x] Python 3.12.0.
+- [x] rustc 1.98.0 / cargo 1.98.0 MSVC.
+- [x] Visual C++ Build Tools + Windows SDK usable.
+- [x] WebView2 Runtime installed.
+- [x] `cargo check --locked` PASS.
+- [x] Tauri release compile PASS.
+- [x] NSIS installer build PASS.
+- [x] Silent NSIS install PASS (`exit 0`).
+- [x] Installed desktop app launches.
+- [x] Packaged backend returns HTTP 200 from `/api/vendors`.
+- [x] Sidecar lifecycle bug discovered and fixed.
+- [x] After desktop exit: backend process count 0, port 8080 listener count 0.
 
-| Method | Endpoint | Chức năng |
-|---|---|---|
-| GET | /api/books | Danh sách sách |
-| POST | /api/books | Import (JSON path) |
-| POST | /api/books/upload | Upload file |
-| DELETE | /api/books/{id} | Xoá sách |
-| PATCH | /api/books/{id} | Cập nhật metadata |
-| POST | /api/books/{id}/research | Research Agent |
-| POST | /api/books/{id}/analyze | Analyze cũ |
-| POST | /api/books/{id}/confirm-metadata | HITL confirm |
-| GET | /api/books/{id}/chunks | Danh sách chunks |
-| GET | /api/books/{id}/glossary | Glossary entries |
-| POST | /api/glossary | Thêm glossary term |
-| DELETE | /api/glossary/{id} | Xoá glossary term |
-| GET | /api/books/{id}/reader | Song ngữ reader |
-| POST | /api/translate/start | Start translate |
-| POST | /api/translate/agentic | Agentic translate |
-| POST | /api/translate/cancel | Cancel |
-| GET | /api/translate/status/{id} | Polling progress |
-| POST | /api/export/{book_id} | Export sách |
-| GET | /api/export/{book_id}/download | Download file |
-| GET | /api/vendors | Danh sách vendor |
-| POST | /api/vendors/{id}/models | Fetch models |
-| POST | /api/test-connection | Test API key |
-| GET | /api/categories | Danh sách category |
+Lifecycle fix commit:
 
----
+```text
+02e86bc fix: terminate desktop sidecar on app exit
+```
 
-## Chưa làm
+Tauri manifest normalization commit:
 
-- [ ] Phase 4: Cover AI (Stable Diffusion) — tạm gác
-- [ ] Tauri desktop build (cần Windows SDK)
-- [ ] Export .mobi (cần Calibre)
-- [ ] Unit test cho agentic pipeline
-- [ ] Error recovery cho background task crash
-- [ ] Admin dashboard (thống kê token usage, tốc độ dịch)
+```text
+178578a chore: normalize tauri manifest features
+```
 
----
+Local-state ignore commit:
 
-*Dự án bởi **Trương Công Định (SlncTrZ)** — Ebook Translator v0.2.0*
+```text
+4d78c38 chore: ignore local assistant state
+```
+
+## Full pipeline validation còn lại
+
+Ngày test tiếp theo chỉ cần chạy trên **packaged Windows app**, không cần thêm feature trước.
+
+Checklist:
+
+```text
+1. Install latest NSIS build.
+2. Launch packaged app.
+3. Import 1 TXT thật.
+4. Import 1 EPUB thật có CSS/images/TOC.
+5. Run Research/HITL.
+6. Run Standard translation on a small chapter range.
+7. Optionally run Agentic on a small range.
+8. Interrupt an active job and close app.
+9. Relaunch and resume the same job.
+10. Confirm completed chunks are not translated twice.
+11. Inspect deterministic QA.
+12. Manually correct one chunk.
+13. Save one approved correction to Translation Memory.
+14. Export TXT.
+15. Export EPUB and reopen it.
+16. Confirm assets/TOC/layout resources still exist.
+17. Relaunch and confirm books/jobs/state persist.
+18. If all pass: record evidence and tag v1.0-rc1.
+```
+
+## Không block v1.0
+
+Các mục sau để sau release candidate:
+
+- server.py → service-layer refactor;
+- fuzzy Translation Memory candidate ranking;
+- chapter summaries / entity registry / approved-example context;
+- deeper deterministic QA;
+- inline-markup preservation improvements inside translated EPUB paragraphs;
+- MSI packaging after NSIS;
+- Cover AI / OCR / audiobook / chat-with-book / vector DB.
+
+## Kết luận
+
+Ngày 2026-09-01 kết thúc ở trạng thái:
+
+```text
+Core implementation       DONE
+Automated regression      PASS
+Frontend production build PASS
+Windows Gate 2            PASS
+Gate 4 basic lifecycle    PASS
+Full real-book pipeline   PENDING USER VALIDATION
+```
+
+Không nên viết thêm feature trước khi full pipeline test hoàn tất.

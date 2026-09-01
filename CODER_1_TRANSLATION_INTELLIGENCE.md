@@ -1,5 +1,7 @@
 # Coder 1 — Translation Intelligence Lane
 
+> **Status: COMPLETED / ARCHIVED (2026-09-01).** Category-aware Standard prompting, bounded context engine and deterministic QA were implemented and integrated. Exact Translation Memory is implemented; fuzzy TM remains an intentionally deferred post-RC enhancement. This file is historical assignment evidence, not an active lane.
+
 Project: `Ebook_Transalator`
 
 This file is self-contained. Follow it as the authoritative assignment for this lane.
