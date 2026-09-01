@@ -21,7 +21,9 @@ _ENCODING_PRIORITY = [
     "shift_jis",
     "euc-jp",
     "euc-kr",
-    "utf-16",
+    "windows-1252",
+    "cp1252",
+    "iso-8859-1",
 ]
 
 _CHAPTER_PATTERNS = re.compile(
@@ -30,7 +32,7 @@ _CHAPTER_PATTERNS = re.compile(
     r"|"
     r"\d+\.\s*"
     r"|"
-    r"第[\u4e00-\u9fff\u3000-\u303f]+[章节回]"
+    r"第(?:[0-9]+|[〇零一二三四五六七八九十百千万两]+)[章节回]"
     r")",
     re.IGNORECASE,
 )
@@ -40,7 +42,7 @@ def _score_encoding(raw: bytes, enc: str) -> float:
     """Decode bytes with encoding, return ratio of valid chars (0-1)."""
     try:
         decoded = raw.decode(enc, errors="replace")
-    except (UnicodeDecodeError, LookupError):
+    except (UnicodeError, LookupError):
         return 0.0
     if not decoded:
         return 0.0
@@ -52,34 +54,45 @@ class TxtParser(BaseParser):
     """Parse .txt files with encoding detection and chapter splitting."""
 
     def _detect_encoding(self, file_path: str) -> str:
-        """Detect encoding: score-based, uu tien encoding co it replacement chars nhat."""
+        """Detect encoding without letting permissive East-Asian codecs win by accident."""
         try:
             with open(file_path, "rb") as f:
                 raw = f.read(1024 * 64)
         except OSError as e:
             raise ValueError(f"Cannot read file: {e}") from e
 
+        if raw.startswith(b"\xef\xbb\xbf"):
+            return "utf-8-sig"
+        if raw.startswith((b"\xff\xfe", b"\xfe\xff")):
+            return "utf-16"
+
+        try:
+            raw.decode("utf-8", errors="strict")
+            return "utf-8"
+        except UnicodeDecodeError:
+            pass
+
+        try:
+            detected = chardet.detect(raw)
+            det = detected.get("encoding", "") or ""
+            confidence = float(detected.get("confidence", 0) or 0)
+            normalized = det.lower().replace("_", "-")
+            if det and confidence >= 0.5 and not normalized.startswith("utf-16"):
+                try:
+                    raw.decode(det, errors="strict")
+                    return det
+                except (UnicodeError, LookupError):
+                    pass
+        except Exception:
+            pass
+
         best_enc = "utf-8"
         best_score = 0.0
-
         for enc in _ENCODING_PRIORITY:
             score = _score_encoding(raw, enc)
             if score > best_score:
                 best_score = score
                 best_enc = enc
-            if score > 0.99:
-                break
-
-        # Neu khong encoding nao dat > 50%, fallback chardet
-        if best_score < 0.5:
-            try:
-                result = chardet.detect(raw)
-                det = result.get("encoding", "") or ""
-                if det and result.get("confidence", 0) > 0.3:
-                    return det
-            except Exception:
-                pass
-
         return best_enc
 
     def parse(self, file_path: str) -> ParsedBook:

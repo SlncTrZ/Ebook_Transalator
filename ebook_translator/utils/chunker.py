@@ -31,10 +31,13 @@ def _hash_text(text: str) -> str:
 
 def _split_oversize_paragraph(text: str) -> list[str]:
     """Split a paragraph exceeding MAX_TOKENS by sentence boundaries."""
-    sentences = re.split(r"(?<=[.!?])\s+", text)
+    sentences = re.split(r"(?<=[。！？])|(?<=[.!?])\s+", text)
     chunks: list[str] = []
     current = ""
     for sent in sentences:
+        sent = sent.strip()
+        if not sent:
+            continue
         candidate = f"{current} {sent}".strip() if current else sent
         if _count_tokens(candidate) > MAX_TOKENS_PER_CHUNK and current:
             chunks.append(current)
