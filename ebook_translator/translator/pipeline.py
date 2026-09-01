@@ -16,7 +16,7 @@ from tenacity import (
 )
 
 from ebook_translator.db.database import Database
-from ebook_translator.models import CacheEntry, Chunk, GlossaryEntry
+from ebook_translator.models import BookCategory, CacheEntry, Chunk, GlossaryEntry
 from ebook_translator.translator.adapters import VENDORS
 from ebook_translator.translator.cache_key import prompt_fingerprint
 from ebook_translator.translator.gateway import LLMConfig, LLMGateway
@@ -24,23 +24,9 @@ from ebook_translator.translator.metrics import (
     record_cache_hit,
     record_translation_memory_hit,
 )
+from ebook_translator.translator.prompts import get_system_prompt
 
 logger = logging.getLogger(__name__)
-
-SYSTEM_PROMPT = (
-    "You are a professional literary translator. Translate the following text "
-    "from {source_lang} to {target_lang}.\n\n"
-    "RULES:\n"
-    "1. Preserve the original meaning, tone, and style.\n"
-    "2. For proper nouns, character names, skills, items, and techniques: "
-    "capitalize the FIRST LETTER of each word in Vietnamese.\n"
-    "   Example: 'thiên địa pháp tắc' -> 'Thiên Địa Pháp Tắc'\n"
-    "   Example: 'hỏa cầu thuật' -> 'Hỏa Cầu Thuật'\n"
-    "   Example: 'kiếm' -> 'Kiếm'\n"
-    "3. Use the provided glossary terms exactly as given.\n"
-    "4. Return only the translated text, no explanations."
-)
-
 
 @dataclass
 class TranslationConfig:
@@ -52,6 +38,7 @@ class TranslationConfig:
     base_url: str = ""
     source_lang: str = "en"
     target_lang: str = "vi"
+    category: BookCategory | str | None = None
     max_retries: int = 3
     request_timeout: int = 120
 
@@ -62,6 +49,12 @@ class TranslationConfig:
             self.base_url = self.base_url or v.base_url
             if not self.model:
                 self.model = v.default_model
+        if self.category is not None and not isinstance(self.category, BookCategory):
+            try:
+                self.category = BookCategory(self.category)
+            except ValueError:
+                logger.warning("Unknown category %r; falling back to general", self.category)
+                self.category = BookCategory.GENERAL
 
 
 _RETRY_EXCEPTIONS = (
@@ -84,6 +77,7 @@ class TranslationPipeline:
                 base_url=config.base_url,
             )
         )
+        self._book_categories: dict[int, BookCategory] = {}
 
     async def close(self) -> None:
         pass
@@ -98,10 +92,31 @@ class TranslationPipeline:
             prompt = f"[Glossary - use these terms EXACTLY, they are already capitalized]\n{terms}\n\n[Text]\n{chunk.original_text}"
         return prompt
 
+    async def _resolve_category(self, book_id: int) -> BookCategory:
+        """Resolve category from explicit config or the persisted book, then cache it."""
+        if isinstance(self._config.category, BookCategory):
+            return self._config.category
+        cached = self._book_categories.get(book_id)
+        if cached is not None:
+            return cached
+        book = await self._db.get_book(book_id)
+        category = book.category if book is not None else BookCategory.GENERAL
+        if not isinstance(category, BookCategory):
+            try:
+                category = BookCategory(category)
+            except ValueError:
+                category = BookCategory.GENERAL
+        self._book_categories[book_id] = category
+        return category
+
     def _build_messages(
-        self, chunk: Chunk, glossary: list[GlossaryEntry]
+        self,
+        chunk: Chunk,
+        glossary: list[GlossaryEntry],
+        category: BookCategory,
     ) -> list[dict]:
-        system = SYSTEM_PROMPT.format(
+        system = get_system_prompt(
+            category,
             source_lang=self._config.source_lang,
             target_lang=self._config.target_lang,
         )
@@ -130,7 +145,8 @@ class TranslationPipeline:
             return remembered
 
         # Step 2: exact-response cache is isolated by the complete prompt context.
-        messages = self._build_messages(chunk, glossary)
+        category = await self._resolve_category(chunk.book_id)
+        messages = self._build_messages(chunk, glossary, category)
         context_hash = prompt_fingerprint(messages)
         cached = await self._db.get_cached(
             content_hash=chunk.content_hash,

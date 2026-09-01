@@ -512,17 +512,154 @@ A feature is DONE only when:
 
 ---
 
-## 10. Immediate Next Slices
+## 10. Immediate Parallel Execution Plan — Two Coders
 
-Execute in this order:
+The earlier P0 sequencing has been completed far enough that the next high-value work can run in two parallel lanes with strict file ownership.
 
-1. **P0.1 Translation routing repair**
-2. **P0.2 Unified LLM gateway**
-3. **P0.3 Job/progress state normalization**
-4. **P0.4 Lifecycle integration tests**
-5. **P1 UI Stage A — audit/component map**
-6. **P1 UI Stage B — design tokens + workbench shell**
-7. **P1 Translation Workspace**
-8. **P1 EPUB fidelity engine**
+The project should now use **two coder lanes plus one later integration gate**.
 
-Do not parallelize P0 architecture changes across multiple juniors touching the same orchestration files. Prefer narrow sequential slices with clean review points.
+### 10.1 Coder 1 — Translation Intelligence
+
+Authoritative handoff file:
+
+```text
+CODER_1_TRANSLATION_INTELLIGENCE.md
+```
+
+Primary ownership:
+
+```text
+ebook_translator/translator/**
+ebook_translator/agent/**
+translation/gateway/memory tests
+```
+
+Mission:
+
+```text
+Context Engine
+→ Category-aware Standard prompting
+→ Deterministic QA
+→ Translation Memory fuzzy-ranking foundation
+```
+
+This coder MUST NOT modify:
+
+```text
+ebook_translator/server.py
+ebook_translator/models.py
+ebook_translator/db/**
+frontend/**
+pyproject.toml
+requirements.txt
+```
+
+### 10.2 Coder 2 — Job Reliability & Persistence
+
+Authoritative handoff file:
+
+```text
+CODER_2_JOB_RELIABILITY.md
+```
+
+Primary ownership:
+
+```text
+ebook_translator/db/**
+ebook_translator/jobs/** if created
+job/recovery/progress/lifecycle tests
+```
+
+Mission:
+
+```text
+Formal Job State Machine
+→ True Resume
+→ Range-safe recovery
+→ Retry/attempt metadata
+→ Per-job diagnostics foundation
+```
+
+This coder MUST NOT modify:
+
+```text
+ebook_translator/server.py
+ebook_translator/models.py
+ebook_translator/translator/**
+ebook_translator/agent/**
+frontend/**
+pyproject.toml
+requirements.txt
+```
+
+### 10.3 Shared / Integration-Only Files
+
+The two coders must not edit these files concurrently:
+
+```text
+ebook_translator/server.py
+ebook_translator/models.py
+frontend/src/api.ts
+pyproject.toml
+requirements.txt
+```
+
+When either lane requires changes in shared files, the coder must return an explicit integration contract rather than editing the shared file.
+
+Integration contract must specify:
+
+```text
+file
+required endpoint/model/method
+input
+output
+state/error semantics
+reason
+```
+
+The integration owner applies shared-file changes only after both lanes complete or reach a clean review boundary.
+
+### 10.4 Parallel Safety Rules
+
+For both coders:
+
+1. Ownership boundaries are mandatory, not advisory.
+2. Do not reset, checkout, clean, or discard unrelated working-tree changes.
+3. Do not broad-refactor outside the assigned domain.
+4. Do not commit or push unless explicitly instructed.
+5. Do not modify a shared file merely because doing so is easier locally.
+6. Add tests inside the lane's owned test scope.
+7. Report required cross-lane contracts explicitly.
+8. Full-suite failures caused by missing shared integration must be documented rather than patched by violating ownership.
+
+### 10.5 Integration Gate After Both Coders
+
+After both handoffs are returned, perform one controlled integration pass over shared files.
+
+Expected integration work may include:
+
+```text
+server.py route/service wiring
+models.py contract additions
+frontend/src/api.ts API contract updates
+shared dependency/version updates only if proven necessary
+full regression suite
+```
+
+Do not merge the two lanes by allowing both coders to independently modify orchestration hotspots.
+
+### 10.6 Required Handoff Format
+
+Each coder must return:
+
+```text
+1. What changed
+2. Files changed
+3. Tests added/updated
+4. Test results
+5. Shared contracts required
+6. Known limitations
+7. Recommended integration step
+```
+
+The two dedicated handoff files contain the complete acceptance criteria and non-goals for each lane.
