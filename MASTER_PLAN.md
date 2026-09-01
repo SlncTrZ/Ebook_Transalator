@@ -520,42 +520,37 @@ The earlier two-coder Translation Intelligence and Job Reliability lanes have be
 
 The project is now in **release-hardening mode**. Do not expand feature scope until the release gates below are satisfied.
 
-### 10.1 Gate 1 — Stabilize the Frontend Build Environment
+### 10.1 Gate 1 — Stabilize the Frontend Build Environment — VERIFIED
 
-Current blocker:
-
-```text
-Unsupported Node 26 alpha runtime
-+ missing npm optional native bindings
-  - @rolldown/binding-linux-x64-gnu
-  - @tauri-apps/cli-linux-x64-gnu
-```
-
-Required actions:
-
-1. Move the development/build environment to Node 22 or 24 stable.
-2. Reinstall frontend dependencies cleanly under the stable Node runtime.
-3. Verify `npm run build` from `frontend/`.
-4. Do not change application code merely to work around a corrupted/incompatible native dependency install.
-
-Acceptance:
+Verified on 2026-09-01 with Node **22.23.2**:
 
 ```text
-npm run build PASS
 TypeScript compile PASS
-no dependency-lock drift beyond the clean stable-runtime install
+npm run build PASS
+@rolldown/binding-linux-x64-gnu present
+@tauri-apps/cli-linux-x64-gnu present
+tauri-cli 2.11.4 reachable
+npm audit --omit=dev: 0 vulnerabilities
 ```
 
-### 10.2 Gate 2 — Rust / Tauri Verification
+Host-specific note: `/mnt/pc-dev` does not permit npm to create symlinks, so `npm ci` must use `--no-bin-links` and local non-committed executable wrappers are needed under `node_modules/.bin` for npm scripts on this host. Do not change `package.json` or application source to encode this filesystem workaround.
 
-Current blocker: Rust/Cargo are not available on the verified development host.
+### 10.2 Gate 2 — Rust / Tauri Verification — IN PROGRESS
 
-Required actions after toolchain installation:
+Rust stable has been verified locally without system-wide installation:
 
 ```text
-rustc --version
-cargo --version
-cargo check
+rustc 1.98.0
+cargo 1.98.0
+```
+
+`cargo check` must use a Linux-native target directory such as `/tmp/ebook-tauri-target` because Rust object files built directly under `/mnt/pc-dev` are not linkable on this host. With the target directory moved to `/tmp`, compilation reaches Tauri native dependencies and currently stops because the host lacks the `glib-2.0` development package required by `glib-sys`.
+
+Next required actions:
+
+```text
+install/verify required Tauri Linux system development libraries, or run the release build on the primary Windows target environment
+cargo check --locked
 npm run desktop:build
 ```
 

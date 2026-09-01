@@ -78,8 +78,11 @@ ebook_translator/
 
 - Backend regression suite: **79 tests passing** at the latest verified checkpoint.
 - TypeScript compile: **passing**.
-- `npm run build`: currently blocked on the development host by missing npm optional native bindings (`rolldown` / Tauri CLI) while running an unsupported Node 26 alpha build.
-- Tauri desktop package: scaffold and Python sidecar wiring exist, but full Rust/Tauri installer verification remains a release gate.
+- Frontend production build: **passing under Node 22.23.2** after a clean optional-dependency install. The `/mnt/pc-dev` filesystem does not permit npm symlink creation, so local non-committed `.bin` wrappers are required on this host; application source and lockfile do not need a workaround.
+- Production npm dependency audit (`--omit=dev`): **0 vulnerabilities** at the latest verified checkpoint.
+- Python sidecar: build + startup/shutdown smoke test **passing**.
+- Rust stable toolchain: verified locally with `rustc 1.98.0` / `cargo 1.98.0`. Linux `cargo check` now reaches native Tauri system dependencies and is blocked by missing `glib-2.0` development libraries on this host.
+- Full Tauri installer/package verification remains a release gate, preferably on the primary Windows target environment.
 
 ## Project documents
 
