@@ -351,8 +351,9 @@ async def analyze_book(book_id: int, req: AnalyzeRequest) -> dict:
     base_url = req.base_url
     if not base_url and v:
         base_url = v.base_url
-
-    model = req.model or (v.default_model if v else "gpt-4o-mini")
+    if not req.model:
+        raise HTTPException(status_code=400, detail="Select a model fetched from the provider")
+    model = req.model
 
     try:
         preview = await get_preview_text(book.file_path)
@@ -398,7 +399,9 @@ async def research_book(book_id: int, req: AnalyzeRequest) -> dict:
         raise HTTPException(status_code=400, detail="API key required")
 
     base_url = req.base_url or (v.base_url if v else "")
-    model = req.model or (v.default_model if v else "gpt-4o-mini")
+    if not req.model:
+        raise HTTPException(status_code=400, detail="Select a model fetched from the provider")
+    model = req.model
 
     ctx = AgentContext(
         book_id=book_id,
@@ -731,10 +734,13 @@ async def start_translate(req: StartTranslateRequest) -> dict:
             detail="Agentic translation must use /api/translate/agentic",
         )
 
+    if not req.model:
+        raise HTTPException(status_code=400, detail="Select a model fetched from the provider")
+
     config = TranslationConfig(
         vendor=req.vendor,
         api_key=api_key,
-        model=req.model or "gpt-4o-mini",
+        model=req.model,
         base_url=req.base_url,
         source_lang=req.source_lang,
         target_lang=req.target_lang,
@@ -866,11 +872,13 @@ async def translate_agentic(req: StartTranslateRequest) -> dict:
     from ebook_translator.translator.adapters import VENDORS
 
     vendor_info = VENDORS.get(req.vendor)
+    if not req.model:
+        raise HTTPException(status_code=400, detail="Select a model fetched from the provider")
     ctx = AgentContext(
         book_id=book_id,
         vendor=req.vendor,
         api_key=api_key,
-        model=req.model or (vendor_info.default_model if vendor_info else "gpt-4o-mini"),
+        model=req.model,
         source_lang=book.source_lang,
         target_lang=book.target_lang,
         category=book.category,
@@ -1209,14 +1217,13 @@ async def get_vendor_models(vendor_id: str, req: TestConnectionRequest) -> list[
     from ebook_translator.translator.adapters import fetch_vendor_models
 
     try:
-        models = await fetch_vendor_models(
+        return await fetch_vendor_models(
             vendor_id=vendor_id,
             api_key=req.api_key,
             base_url=req.base_url or None,
         )
-        return models
-    except Exception:
-        return []
+    except Exception as exc:
+        raise HTTPException(status_code=502, detail=f"Model discovery failed: {exc}") from exc
 
 
 @app.post("/api/test-connection")
@@ -1224,10 +1231,13 @@ async def test_connection(req: TestConnectionRequest) -> dict:
     """Test API connection voi vendor dang chon."""
     from ebook_translator.translator.adapters import create_adapter
 
+    if not req.model:
+        raise HTTPException(status_code=400, detail="Select a model fetched from the provider")
+
     adapter = create_adapter(
         vendor_id=req.vendor,
         api_key=req.api_key,
-        model=req.model or "gpt-4o-mini",
+        model=req.model,
         base_url=req.base_url or "",
     )
 

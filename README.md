@@ -10,7 +10,7 @@ Công cụ dịch E-book local-first hướng tới một **Translation Workbenc
 | Tính năng | Mô tả |
 |---|---|
 | **Agentic Pipeline** | Research → HITL → Translate → deterministic validation; Standard và Agentic đều dùng persisted job lifecycle và resumable execution |
-| **Multi-Vendor** | Unified LLM Gateway + adapter layer cho OpenAI-compatible, DeepSeek, Groq, Together, Ollama, Anthropic và Gemini |
+| **Multi-Vendor** | Unified LLM Gateway + adapter layer cho OpenAI-compatible, DeepSeek, Groq, Together, Ollama, Anthropic và Gemini; mọi provider có editable API Base URL và model list được fetch live trực tiếp từ provider |
 | **Category-aware prompts** | Standard và Agentic dùng category/style context thay vì prompt generic |
 | **Song ngữ Reader + QA** | So sánh gốc/dịch, chỉnh sửa thủ công, requeue, deterministic QA issues theo chunk |
 | **Glossary** | Book-scoped exact terminology, chỉnh sửa thủ công và inject vào prompt |
@@ -48,8 +48,9 @@ cd frontend && npm install && npm run dev
 | `POST /api/translate/agentic` | Dịch (Agentic pipeline) |
 | `GET /api/translate/status/{id}` | Polling progress |
 | `GET /api/books/{id}/reader` | Song ngữ reader |
-| `GET /api/vendors` | Danh sách vendor AI |
-| `POST /api/test-connection` | Test API key |
+| `GET /api/vendors` | Danh sách vendor AI + default endpoint metadata |
+| `POST /api/vendors/{id}/models` | Fetch live model list từ Base URL đang cấu hình |
+| `POST /api/test-connection` | Test provider + model + custom Base URL |
 
 ## Kiến trúc
 
@@ -76,7 +77,7 @@ ebook_translator/
 
 ### Release verification status
 
-- Backend regression suite: **81 tests passing** at the latest verified checkpoint, including complex EPUB round-trip and 2,500-chunk resume/progress stress coverage.
+- Backend regression suite: **85 tests passing** at the latest verified checkpoint, including complex EPUB round-trip, 2,500-chunk resume/progress stress coverage, remote Ollama model discovery, and explicit-provider-model routing.
 - TypeScript compile: **passing**.
 - Frontend production build: **passing under Node 22.23.2** after a clean optional-dependency install. The `/mnt/pc-dev` filesystem does not permit npm symlink creation, so local non-committed `.bin` wrappers are required on this host; application source and lockfile do not need a workaround.
 - Production npm dependency audit (`--omit=dev`): **0 vulnerabilities** at the latest verified checkpoint.

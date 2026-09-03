@@ -6,24 +6,29 @@ interface SettingsProps {
 	apiKey: string;
 	model: string;
 	vendor: string;
+	baseUrl: string;
 	onApiKeyChange: (key: string) => void;
 	onModelChange: (model: string) => void;
 	onVendorChange: (vendor: string) => void;
+	onBaseUrlChange: (baseUrl: string) => void;
 }
 
 export function Settings({
 	apiKey,
 	model,
 	vendor,
+	baseUrl,
 	onApiKeyChange,
 	onModelChange,
 	onVendorChange,
+	onBaseUrlChange,
 }: SettingsProps) {
 	const [vendors, setVendors] = useState<Vendor[]>([]);
 	const [testStatus, setTestStatus] = useState<"idle" | "testing" | "ok" | "error">("idle");
 	const [testMsg, setTestMsg] = useState("");
-	const [liveModels, setLiveModels] = useState<string[] | null>(null);
+	const [liveModels, setLiveModels] = useState<string[]>([]);
 	const [fetchingModels, setFetchingModels] = useState(false);
+	const [modelError, setModelError] = useState("");
 	const [serverRunning, setServerRunning] = useState(false);
 
 	useEffect(() => {
@@ -48,57 +53,86 @@ export function Settings({
 	}, []);
 
 	const currentVendor = vendors.find((item) => item.id === vendor);
+	const requiresApiKey = currentVendor?.requires_api_key !== false;
 
 	useEffect(() => {
-		if (!currentVendor) return;
-		if (!model || model === "gpt-4o-mini") onModelChange(currentVendor.default_model);
-	}, [currentVendor, model, onModelChange]);
+		if (currentVendor && !baseUrl) onBaseUrlChange(currentVendor.base_url);
+	}, [currentVendor, baseUrl, onBaseUrlChange]);
 
-	useEffect(() => {
-		if (!vendor) return;
-		const stored = localStorage.getItem(`et_models_${vendor}`);
-		setLiveModels(stored ? JSON.parse(stored) : null);
-	}, [vendor]);
-
-	const handleVendorChange = (newVendor: string) => {
-		onVendorChange(newVendor);
-		const next = vendors.find((item) => item.id === newVendor);
-		if (next) onModelChange(next.default_model);
+	const invalidateModels = () => {
+		setLiveModels([]);
+		setModelError("");
+		onModelChange("");
 		setTestStatus("idle");
 		setTestMsg("");
 	};
 
+	const handleVendorChange = (newVendor: string) => {
+		onVendorChange(newVendor);
+		invalidateModels();
+	};
+
+	const handleBaseUrlChange = (value: string) => {
+		onBaseUrlChange(value);
+		invalidateModels();
+	};
+
+	const handleRefreshModels = async () => {
+		if (!baseUrl.trim()) {
+			setModelError("Enter the provider API base URL first.");
+			return;
+		}
+		if (requiresApiKey && !apiKey) {
+			setModelError("Enter the provider API key first.");
+			return;
+		}
+
+		setFetchingModels(true);
+		setModelError("");
+		try {
+			const models = await fetchVendorModels(vendor, apiKey, baseUrl.trim());
+			if (models.length === 0) {
+				setLiveModels([]);
+				onModelChange("");
+				setModelError("Provider returned no models.");
+				return;
+			}
+			setLiveModels(models);
+			if (!models.includes(model)) onModelChange(models[0]);
+		} catch (error) {
+			setLiveModels([]);
+			onModelChange("");
+			setModelError(error instanceof Error ? error.message : String(error));
+		} finally {
+			setFetchingModels(false);
+		}
+	};
+
 	const handleTest = async () => {
-		if (!apiKey && currentVendor?.requires_api_key !== false) return;
+		if (!baseUrl.trim()) return;
+		if (!model) {
+			setTestStatus("error");
+			setTestMsg("Refresh the provider model list and select a model first.");
+			return;
+		}
+		if (requiresApiKey && !apiKey) return;
+
 		setTestStatus("testing");
 		setTestMsg("");
 		try {
-			const result = await testConnection(vendor, apiKey, model);
+			const result = await testConnection(vendor, apiKey, model, baseUrl.trim());
 			if (result.status !== "ok") {
 				setTestStatus("error");
 				setTestMsg(result.detail || "Connection failed");
 				return;
 			}
-
 			setTestStatus("ok");
 			setTestMsg(result.reply || "Connection verified");
-			setFetchingModels(true);
-			try {
-				const models = await fetchVendorModels(vendor, apiKey);
-				if (models.length > 0) {
-					setLiveModels(models);
-					localStorage.setItem(`et_models_${vendor}`, JSON.stringify(models));
-				}
-			} finally {
-				setFetchingModels(false);
-			}
 		} catch (error) {
 			setTestStatus("error");
 			setTestMsg(error instanceof Error ? error.message : String(error));
 		}
 	};
-
-	const models = liveModels || currentVendor?.models || [];
 
 	return (
 		<div className="settings">
@@ -106,80 +140,106 @@ export function Settings({
 				<div>
 					<span className="section-index">SYS / RUNTIME</span>
 					<strong>Model runtime</strong>
-					<p>Provider, model and session credentials for the local translation gateway.</p>
+					<p>Provider endpoint, live model discovery and session credentials for the local translation gateway.</p>
 				</div>
 				<div className={`backend-readout ${serverRunning ? "online" : "offline"}`}>
 					<span>Backend</span>
 					<strong>{serverRunning ? "Online" : "Offline"}</strong>
 				</div>
 			</div>
+
 			<div className="section-bar">
 				<div><span className="section-index">01</span><strong>Provider</strong></div>
-				<span>Credentials remain in memory for this app session only.</span>
-			</div>
-			<div className="settings-grid">
-			<div className="setting-group">
-				<label htmlFor="vendor">AI provider</label>
-				<select id="vendor" value={vendor} onChange={(event) => handleVendorChange(event.target.value)}>
-					{vendors.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
-				</select>
-				{currentVendor?.requires_api_key === false && (
-					<p className="hint">This provider is local and does not require an API key.</p>
-				)}
+				<span>Model lists are fetched directly from the configured provider endpoint.</span>
 			</div>
 
-			<div className="setting-group">
-				<label htmlFor="api-key">API key</label>
-				{currentVendor?.docs_url && (
-					<a href={currentVendor.docs_url} target="_blank" rel="noreferrer" className="hint">Provider key documentation</a>
-				)}
-				<div className="api-key-row">
+			<div className="settings-grid">
+				<div className="setting-group">
+					<label htmlFor="vendor">AI provider</label>
+					<select id="vendor" value={vendor} onChange={(event) => handleVendorChange(event.target.value)}>
+						{vendors.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}
+					</select>
+					{currentVendor?.requires_api_key === false && (
+						<p className="hint">This provider does not require an API key.</p>
+					)}
+				</div>
+
+				<div className="setting-group">
+					<label htmlFor="base-url">API base URL</label>
+					<input
+						id="base-url"
+						type="text"
+						value={baseUrl}
+						onChange={(event) => handleBaseUrlChange(event.target.value)}
+						placeholder={currentVendor?.base_url || "https://provider.example/v1"}
+					/>
+					<p className="hint">Editable for every provider. Example Ollama: http://192.168.1.171:11434</p>
+				</div>
+
+				<div className="setting-group">
+					<label htmlFor="api-key">API key</label>
+					{currentVendor?.docs_url && (
+						<a href={currentVendor.docs_url} target="_blank" rel="noreferrer" className="hint">Provider key documentation</a>
+					)}
 					<input
 						id="api-key"
 						type="password"
 						autoComplete="off"
-						placeholder={currentVendor?.requires_api_key === false ? "Not required" : "Enter key for this session"}
+						placeholder={requiresApiKey ? "Enter key for this session" : "Not required"}
 						value={apiKey}
 						onChange={(event) => {
 							onApiKeyChange(event.target.value);
-							setTestStatus("idle");
+							invalidateModels();
 						}}
-						disabled={currentVendor?.requires_api_key === false}
+						disabled={!requiresApiKey}
 					/>
+					<p className="hint">Credentials are kept in memory for the current app session only.</p>
+				</div>
+
+				<div className="setting-group">
+					<label htmlFor="model">Provider models</label>
+					<div className="api-key-row">
+						<select
+							id="model"
+							value={model}
+							onChange={(event) => onModelChange(event.target.value)}
+							disabled={liveModels.length === 0}
+						>
+							{liveModels.length === 0 && <option value="">Refresh models from provider</option>}
+							{liveModels.map((item) => <option key={item} value={item}>{item}</option>)}
+						</select>
+						<button
+							className="btn-test"
+							onClick={() => void handleRefreshModels()}
+							disabled={fetchingModels || !baseUrl.trim() || (requiresApiKey && !apiKey)}
+						>
+							{fetchingModels ? "Refreshing…" : "Refresh models"}
+						</button>
+					</div>
+					{liveModels.length > 0 && <p className="hint">{liveModels.length} models loaded directly from provider.</p>}
+					{modelError && <p className="hint connection-status error">{modelError}</p>}
+				</div>
+
+				<div className="setting-group">
+					<label>Connection</label>
 					<button
 						className="btn-test"
 						onClick={() => void handleTest()}
-						disabled={testStatus === "testing" || (!apiKey && currentVendor?.requires_api_key !== false)}
+						disabled={testStatus === "testing" || !baseUrl.trim() || !model || (requiresApiKey && !apiKey)}
 					>
 						{testStatus === "testing" ? "Testing…" : "Test connection"}
 					</button>
+					{testStatus !== "idle" && (
+						<p className={`hint connection-status ${testStatus}`}>{testMsg}</p>
+					)}
 				</div>
-				{testStatus !== "idle" && (
-					<p className={`hint connection-status ${testStatus}`}>{testMsg}</p>
-				)}
-				<p className="hint">Credentials are kept in memory for the current app session only.</p>
-			</div>
 
-			<div className="setting-group">
-				<label htmlFor="model">Model {fetchingModels ? "· refreshing list" : ""}</label>
-				<select id="model" value={model} onChange={(event) => onModelChange(event.target.value)}>
-					{models.length === 0 && model && <option value={model}>{model}</option>}
-					{models.map((item) => <option key={item} value={item}>{item}</option>)}
-				</select>
-				{liveModels && <p className="hint">{liveModels.length} models loaded from provider.</p>}
-			</div>
-
-			<div className="setting-group">
-				<label>API base URL</label>
-				<input type="text" value={currentVendor?.base_url || ""} disabled />
-			</div>
-
-			<div className="setting-group runtime-detail">
-				<label>Backend status</label>
-				<p className={`server-state ${serverRunning ? "online" : "offline"}`}>
-					{serverRunning ? "Running / API reachable" : "Unavailable / API not reachable"}
-				</p>
-			</div>
+				<div className="setting-group runtime-detail">
+					<label>Backend status</label>
+					<p className={`server-state ${serverRunning ? "online" : "offline"}`}>
+						{serverRunning ? "Running / API reachable" : "Unavailable / API not reachable"}
+					</p>
+				</div>
 			</div>
 		</div>
 	);

@@ -14,9 +14,10 @@ interface TranslateViewProps {
 	apiKey: string;
 	model: string;
 	vendor: string;
+	baseUrl: string;
 }
 
-export function TranslateView({ book, apiKey, model, vendor }: TranslateViewProps) {
+export function TranslateView({ book, apiKey, model, vendor, baseUrl }: TranslateViewProps) {
 	const [running, setRunning] = useState(false);
 	const [progress, setProgress] = useState<ProgressData | null>(null);
 	const [category, setCategory] = useState("general");
@@ -51,6 +52,7 @@ export function TranslateView({ book, apiKey, model, vendor }: TranslateViewProp
 				vendor,
 				apiKey,
 				model,
+				baseUrl,
 				category,
 				chapterStart,
 				chapterEnd,
@@ -87,6 +89,7 @@ export function TranslateView({ book, apiKey, model, vendor }: TranslateViewProp
 		apiKey,
 		vendor,
 		model,
+		baseUrl,
 		category,
 		chapterStart,
 		chapterEnd,
@@ -102,7 +105,7 @@ export function TranslateView({ book, apiKey, model, vendor }: TranslateViewProp
 
 	if (!book) return <p className="muted">Select a book to start the translation workflow.</p>;
 
-	const startDisabled = running || (requiresApiKey && !apiKey);
+	const startDisabled = running || !model || !baseUrl.trim() || (requiresApiKey && !apiKey);
 
 	const settled = progress ? progress.done + progress.failed : 0;
 	const progressPercent = progress && progress.total > 0
@@ -123,7 +126,7 @@ export function TranslateView({ book, apiKey, model, vendor }: TranslateViewProp
 				</div>
 			</div>
 
-			<MetadataReview book={book} apiKey={apiKey} model={model} vendor={vendor} />
+			<MetadataReview book={book} apiKey={apiKey} model={model} vendor={vendor} baseUrl={baseUrl} />
 
 			<div className="section-bar">
 				<div><span className="section-index">01</span><strong>Translation scope</strong></div>

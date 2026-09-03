@@ -155,6 +155,7 @@ export const researchBook = (
 	vendor: string,
 	apiKey: string,
 	model: string,
+	baseUrl: string,
 	userFeedback = "",
 	forceSearch = false,
 ) =>
@@ -164,6 +165,7 @@ export const researchBook = (
 			vendor,
 			api_key: apiKey,
 			model,
+			base_url: baseUrl,
 			user_feedback: userFeedback,
 			force_search: forceSearch,
 		}),
@@ -235,6 +237,7 @@ function buildTranslationPayload(
 	vendor: string,
 	apiKey: string,
 	model: string,
+	baseUrl: string,
 	category: string,
 	chapterStart: number,
 	chapterEnd: number,
@@ -244,6 +247,7 @@ function buildTranslationPayload(
 		vendor,
 		api_key: apiKey,
 		model,
+		base_url: baseUrl,
 		category,
 		chapter_start: chapterStart,
 		chapter_end: chapterEnd,
@@ -255,6 +259,7 @@ export const startStandardTranslation = (
 	vendor: string,
 	apiKey: string,
 	model: string,
+	baseUrl: string,
 	category: string,
 	chapterStart = 0,
 	chapterEnd = 99999,
@@ -267,6 +272,7 @@ export const startStandardTranslation = (
 				vendor,
 				apiKey,
 				model,
+				baseUrl,
 				category,
 				chapterStart,
 				chapterEnd,
@@ -279,6 +285,7 @@ export const startAgenticTranslation = (
 	vendor: string,
 	apiKey: string,
 	model: string,
+	baseUrl: string,
 	category: string,
 	chapterStart = 0,
 	chapterEnd = 99999,
@@ -291,6 +298,7 @@ export const startAgenticTranslation = (
 				vendor,
 				apiKey,
 				model,
+				baseUrl,
 				category,
 				chapterStart,
 				chapterEnd,
@@ -357,20 +365,29 @@ export const exportBook = (
 	});
 
 // Connection test
-export const testConnection = (vendor: string, apiKey: string, model: string) =>
+export const testConnection = (
+	vendor: string,
+	apiKey: string,
+	model: string,
+	baseUrl: string,
+) =>
 	request<{ status: string; reply?: string; detail?: string }>(
 		"/test-connection",
 		{
 			method: "POST",
-			body: JSON.stringify({ vendor, api_key: apiKey, model }),
+			body: JSON.stringify({ vendor, api_key: apiKey, model, base_url: baseUrl }),
 		},
 	);
 
-// Fetch models from vendor API
-export const fetchVendorModels = (vendorId: string, apiKey: string) =>
+// Fetch models directly from the configured provider endpoint.
+export const fetchVendorModels = (
+	vendorId: string,
+	apiKey: string,
+	baseUrl: string,
+) =>
 	request<string[]>("/vendors/" + vendorId + "/models", {
 		method: "POST",
-		body: JSON.stringify({ vendor: vendorId, api_key: apiKey }),
+		body: JSON.stringify({ vendor: vendorId, api_key: apiKey, base_url: baseUrl }),
 	});
 
 // Config

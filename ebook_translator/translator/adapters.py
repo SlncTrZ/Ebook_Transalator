@@ -33,35 +33,35 @@ VENDORS: dict[str, VendorInfo] = {
         id="openai",
         name="OpenAI",
         base_url="https://api.openai.com/v1",
-        default_model="gpt-4o-mini",
+        default_model="",
         docs_url="https://platform.openai.com/api-keys",
     ),
     "deepseek": VendorInfo(
         id="deepseek",
         name="DeepSeek",
         base_url="https://api.deepseek.com/v1",
-        default_model="deepseek-chat",
+        default_model="",
         docs_url="https://platform.deepseek.com/api_keys",
     ),
     "groq": VendorInfo(
         id="groq",
         name="Groq (free, fast)",
         base_url="https://api.groq.com/openai/v1",
-        default_model="llama-3.3-70b-versatile",
+        default_model="",
         docs_url="https://console.groq.com/keys",
     ),
     "together": VendorInfo(
         id="together",
         name="Together AI",
         base_url="https://api.together.xyz/v1",
-        default_model="mistralai/Mixtral-8x22B-Instruct-v0.1",
+        default_model="",
         docs_url="https://api.together.xyz/settings/api-keys",
     ),
     "ollama": VendorInfo(
         id="ollama",
         name="Ollama (local)",
         base_url="http://localhost:11434",
-        default_model="llama3.2",
+        default_model="",
         requires_api_key=False,
         docs_url="https://ollama.com/",
     ),
@@ -69,14 +69,14 @@ VENDORS: dict[str, VendorInfo] = {
         id="anthropic",
         name="Anthropic Claude",
         base_url="https://api.anthropic.com/v1",
-        default_model="claude-3-haiku-20240307",
+        default_model="",
         docs_url="https://console.anthropic.com/",
     ),
     "google": VendorInfo(
         id="google",
         name="Google Gemini",
         base_url="https://generativelanguage.googleapis.com/v1beta",
-        default_model="gemini-2.0-flash",
+        default_model="",
         docs_url="https://aistudio.google.com/apikey",
     ),
 }
@@ -91,7 +91,7 @@ class BaseAdapter(ABC):
     def __init__(self, api_key: str, model: str, base_url: str) -> None:
         self.api_key = api_key
         self.model = model
-        self.base_url = base_url
+        self.base_url = base_url.rstrip("/")
 
     @abstractmethod
     async def translate(
@@ -141,40 +141,17 @@ class OpenAICompatibleAdapter(BaseAdapter):
             return data["choices"][0]["message"]["content"].strip()
 
     async def fetch_models(self) -> list[str]:
-        """GET /v1/models -> list model IDs."""
+        """GET /models and return provider-reported model IDs verbatim."""
         import httpx
 
-        try:
-            async with httpx.AsyncClient(timeout=10) as client:
-                resp = await client.get(
-                    f"{self.base_url}/models",
-                    headers=self._headers(),
-                )
-                if resp.status_code == 200:
-                    data = resp.json()
-                    models = [m["id"] for m in data.get("data", [])]
-                    # Loc chat models (bo qua embedding)
-                    chat_keywords = [
-                        "gpt",
-                        "chat",
-                        "instruct",
-                        "turbo",
-                        "deepseek",
-                        "llama",
-                        "mixtral",
-                        "qwen",
-                        "gemma",
-                        "mistral",
-                        "claude",
-                        "command",
-                    ]
-                    filtered = [
-                        m for m in models if any(k in m.lower() for k in chat_keywords)
-                    ]
-                    return filtered or models[:30]
-        except Exception:
-            pass
-        return []
+        async with httpx.AsyncClient(timeout=10) as client:
+            resp = await client.get(
+                f"{self.base_url}/models",
+                headers=self._headers(),
+            )
+            resp.raise_for_status()
+            data = resp.json()
+            return [m["id"] for m in data.get("data", []) if m.get("id")]
 
     def _headers(self) -> dict[str, str]:
         headers = {"Content-Type": "application/json"}
@@ -227,15 +204,10 @@ class OllamaAdapter(BaseAdapter):
     async def fetch_models(self) -> list[str]:
         import httpx
 
-        try:
-            async with httpx.AsyncClient(timeout=5) as client:
-                resp = await client.get(f"{self.base_url}/api/tags")
-                if resp.status_code == 200:
-                    models = [m["name"] for m in resp.json().get("models", [])]
-                    return models
-        except Exception:
-            pass
-        return []
+        async with httpx.AsyncClient(timeout=5) as client:
+            resp = await client.get(f"{self.base_url}/api/tags")
+            resp.raise_for_status()
+            return [m["name"] for m in resp.json().get("models", []) if m.get("name")]
 
 
 # ── Anthropic adapter ────────────────────────────────────────────────────
@@ -243,15 +215,6 @@ class OllamaAdapter(BaseAdapter):
 
 class AnthropicAdapter(BaseAdapter):
     """Adapter rieng cho Anthropic Claude API."""
-
-    # Anthropic khong co public model list API -> hardcode + fallback
-    FALLBACK_MODELS = [
-        "claude-3-haiku-20240307",
-        "claude-3-sonnet-20240229",
-        "claude-3-opus-20240229",
-        "claude-3-5-sonnet-20241022",
-        "claude-3-5-haiku-20241022",
-    ]
 
     async def translate(
         self,
@@ -294,7 +257,32 @@ class AnthropicAdapter(BaseAdapter):
             return data["content"][0]["text"].strip()
 
     async def fetch_models(self) -> list[str]:
-        return self.FALLBACK_MODELS
+        import httpx
+
+        models: list[str] = []
+        after_id = ""
+        async with httpx.AsyncClient(timeout=10) as client:
+            for _ in range(20):
+                params: dict[str, str | int] = {"limit": 100}
+                if after_id:
+                    params["after_id"] = after_id
+                resp = await client.get(
+                    f"{self.base_url}/models",
+                    headers={
+                        "x-api-key": self.api_key,
+                        "anthropic-version": "2023-06-01",
+                    },
+                    params=params,
+                )
+                resp.raise_for_status()
+                data = resp.json()
+                models.extend(m["id"] for m in data.get("data", []) if m.get("id"))
+                if not data.get("has_more"):
+                    break
+                after_id = data.get("last_id", "")
+                if not after_id:
+                    break
+        return models
 
 
 # ── Google Gemini adapter ────────────────────────────────────────────────
@@ -338,25 +326,25 @@ class GeminiAdapter(BaseAdapter):
     async def fetch_models(self) -> list[str]:
         import httpx
 
-        try:
-            url = f"{self.base_url}/models?key={self.api_key}"
-            async with httpx.AsyncClient(timeout=10) as client:
-                resp = await client.get(url)
-                if resp.status_code == 200:
-                    models = [
-                        m["name"].replace("models/", "")
-                        for m in resp.json().get("models", [])
-                    ]
-                    chat_models = [m for m in models if "gemini" in m.lower()]
-                    return chat_models[:20]
-        except Exception:
-            pass
-        return [
-            "gemini-2.0-flash",
-            "gemini-2.0-pro",
-            "gemini-1.5-flash",
-            "gemini-1.5-pro",
-        ]
+        models: list[str] = []
+        page_token = ""
+        async with httpx.AsyncClient(timeout=10) as client:
+            for _ in range(20):
+                params = {"key": self.api_key, "pageSize": 100}
+                if page_token:
+                    params["pageToken"] = page_token
+                resp = await client.get(f"{self.base_url}/models", params=params)
+                resp.raise_for_status()
+                data = resp.json()
+                models.extend(
+                    m["name"].replace("models/", "")
+                    for m in data.get("models", [])
+                    if m.get("name")
+                )
+                page_token = data.get("nextPageToken", "")
+                if not page_token:
+                    break
+        return models
 
 
 # ── Factory ──────────────────────────────────────────────────────────────
@@ -390,12 +378,9 @@ async def fetch_vendor_models(
         base_url: Override base URL.
 
     Returns:
-        List model IDs (empty neu khong fetch duoc).
+        Provider-reported model IDs. Provider/network errors are propagated.
     """
     vendor = VENDORS.get(vendor_id)
     url = base_url or (vendor.base_url if vendor else "")
     adapter = create_adapter(vendor_id, api_key, "", url)
-    try:
-        return await adapter.fetch_models()
-    except Exception:
-        return []
+    return await adapter.fetch_models()

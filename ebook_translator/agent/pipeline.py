@@ -45,7 +45,7 @@ class AgentContext:
     category: str = "general"
     vendor: str = "openai"
     api_key: str = ""
-    model: str = "gpt-4o-mini"
+    model: str = ""
     base_url: str = ""
     book_summary: str = ""
     search_results: list[dict] = field(default_factory=list)

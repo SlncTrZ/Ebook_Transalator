@@ -108,7 +108,9 @@ async def test_standard_full_book_starts_background_task(
     _, book_id, file_path = routing_db
     scheduled = _capture_tasks(monkeypatch)
 
-    response = await server.start_translate(server.StartTranslateRequest(file_path=file_path))
+    response = await server.start_translate(
+        server.StartTranslateRequest(file_path=file_path, model="provider-model")
+    )
 
     assert response == {"book_id": book_id, "job_id": 1, "status": "started", "mode": "standard"}
     _assert_scheduled(scheduled, "_run_translation", 0, 99999)
@@ -124,6 +126,7 @@ async def test_standard_range_starts_background_task(
     response = await server.start_translate(
         server.StartTranslateRequest(
             file_path=file_path,
+            model="provider-model",
             chapter_start=1,
             chapter_end=1,
         )
@@ -141,7 +144,7 @@ async def test_agentic_full_book_starts_agentic_task(
     scheduled = _capture_tasks(monkeypatch)
 
     response = await server.translate_agentic(
-        server.StartTranslateRequest(file_path=file_path)
+        server.StartTranslateRequest(file_path=file_path, model="provider-model")
     )
 
     assert response == {"book_id": book_id, "job_id": 1, "status": "started", "mode": "agentic"}
@@ -158,6 +161,7 @@ async def test_agentic_range_starts_agentic_task(
     response = await server.translate_agentic(
         server.StartTranslateRequest(
             file_path=file_path,
+            model="provider-model",
             chapter_start=1,
             chapter_end=1,
         )
@@ -180,4 +184,19 @@ async def test_standard_endpoint_rejects_legacy_agentic_flag(
         )
 
     assert exc_info.value.status_code == 400
+    assert scheduled == []
+
+
+@pytest.mark.asyncio
+async def test_translation_start_requires_explicit_provider_model(
+    routing_db, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _, _, file_path = routing_db
+    scheduled = _capture_tasks(monkeypatch)
+
+    with pytest.raises(server.HTTPException) as exc_info:
+        await server.start_translate(server.StartTranslateRequest(file_path=file_path))
+
+    assert exc_info.value.status_code == 400
+    assert "Select a model fetched from the provider" in exc_info.value.detail
     assert scheduled == []

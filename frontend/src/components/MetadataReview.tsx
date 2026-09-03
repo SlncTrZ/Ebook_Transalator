@@ -7,6 +7,7 @@ interface MetadataReviewProps {
 	apiKey: string;
 	model: string;
 	vendor: string;
+	baseUrl: string;
 }
 
 const LANG: Record<string, string> = {
@@ -22,7 +23,7 @@ const LANG: Record<string, string> = {
 	th: "ไทย",
 };
 
-export function MetadataReview({ book, apiKey, model, vendor }: MetadataReviewProps) {
+export function MetadataReview({ book, apiKey, model, vendor, baseUrl }: MetadataReviewProps) {
 	const confirmedKey = `et_confirmed_${book.id}`;
 	const [analyzing, setAnalyzing] = useState(false);
 	const [metadata, setMetadata] = useState<MetadataResult | null>(null);
@@ -56,7 +57,7 @@ export function MetadataReview({ book, apiKey, model, vendor }: MetadataReviewPr
 		setAnalyzing(true);
 		setError(null);
 		try {
-			const data = await researchBook(book.id, vendor, apiKey, model, feedback, forceSearch);
+			const data = await researchBook(book.id, vendor, apiKey, model, baseUrl, feedback, forceSearch);
 			setMetadata(data);
 			setTitle(data.title || book.title);
 			setLocalizedTitle(data.localized_title || book.localized_title || "");
@@ -69,7 +70,7 @@ export function MetadataReview({ book, apiKey, model, vendor }: MetadataReviewPr
 		} finally {
 			setAnalyzing(false);
 		}
-	}, [book, vendor, apiKey, model, feedback, forceSearch]);
+	}, [book, vendor, apiKey, model, baseUrl, feedback, forceSearch]);
 
 	const handleConfirm = useCallback(async () => {
 		setError(null);
@@ -141,7 +142,7 @@ export function MetadataReview({ book, apiKey, model, vendor }: MetadataReviewPr
 				</label>
 				<button
 					onClick={() => void handleAnalyze()}
-					disabled={analyzing || (requiresApiKey && !apiKey)}
+					disabled={analyzing || !model || !baseUrl.trim() || (requiresApiKey && !apiKey)}
 				>
 					{analyzing ? "Analyzing…" : metadata ? "Re-analyze" : "Analyze metadata"}
 				</button>

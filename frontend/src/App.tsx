@@ -35,16 +35,19 @@ function App() {
 	const [activeWorkspace, setActiveWorkspace] = useState<Workspace>("library");
 	const [selectedBook, setSelectedBook] = useState<Book | null>(null);
 	const [apiKey, setApiKey] = useState("");
-	const [model, setModel] = useState(
-		() => localStorage.getItem("et_model") || "gpt-4o-mini",
-	);
+	const [model, setModel] = useState("");
 	const [vendor, setVendor] = useState(
 		() => localStorage.getItem("et_vendor") || "openai",
 	);
+	const [baseUrl, setBaseUrl] = useState(() => {
+		const initialVendor = localStorage.getItem("et_vendor") || "openai";
+		return localStorage.getItem(`et_base_url_${initialVendor}`) || "";
+	});
 
 	useEffect(() => {
-		// Remove credentials persisted by older builds. Keys are session-memory only now.
+		// Remove legacy runtime selections. Credentials and model discovery are session-scoped.
 		localStorage.removeItem("et_api_key");
+		localStorage.removeItem("et_model");
 	}, []);
 
 	const handleSelectBook = (book: Book) => {
@@ -58,12 +61,17 @@ function App() {
 
 	const handleModelChange = (value: string) => {
 		setModel(value);
-		localStorage.setItem("et_model", value);
 	};
 
 	const handleVendorChange = (value: string) => {
 		setVendor(value);
 		localStorage.setItem("et_vendor", value);
+		setBaseUrl(localStorage.getItem(`et_base_url_${value}`) || "");
+	};
+
+	const handleBaseUrlChange = (value: string) => {
+		setBaseUrl(value);
+		localStorage.setItem(`et_base_url_${vendor}`, value);
 	};
 
 	const canOpen = (workspace: Workspace) => {
@@ -152,6 +160,7 @@ function App() {
 							apiKey={apiKey}
 							model={model}
 							vendor={vendor}
+							baseUrl={baseUrl}
 						/>
 					)}
 					{activeWorkspace === "reader" && (
@@ -168,9 +177,11 @@ function App() {
 							apiKey={apiKey}
 							model={model}
 							vendor={vendor}
+							baseUrl={baseUrl}
 							onApiKeyChange={handleApiKeyChange}
 							onModelChange={handleModelChange}
 							onVendorChange={handleVendorChange}
+							onBaseUrlChange={handleBaseUrlChange}
 						/>
 					)}
 				</main>

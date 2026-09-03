@@ -42,8 +42,10 @@ def _get_parser(file_path: str) -> EpubParser | TxtParser | None:
 
 async def _translate_flow(
     file_path: str,
+    vendor: str,
     api_key: str,
     model: str,
+    base_url: str,
     source_lang: str,
     target_lang: str,
     category: str,
@@ -54,6 +56,12 @@ async def _translate_flow(
     await db.connect()
 
     try:
+        from ebook_translator.translator.adapters import fetch_vendor_models
+
+        available_models = await fetch_vendor_models(vendor, api_key, base_url or None)
+        if model not in available_models:
+            raise ValueError(f"Model {model!r} was not returned by provider {vendor!r}")
+
         # 1. Parse
         console.print(f"[blue]📖 Parsing:[/blue] {file_path}")
         parser = _get_parser(file_path)
@@ -87,8 +95,10 @@ async def _translate_flow(
 
         # 4. Translate
         config = TranslationConfig(
+            vendor=vendor,
             api_key=api_key,
             model=model,
+            base_url=base_url,
             source_lang=source_lang,
             target_lang=target_lang,
         )
@@ -141,21 +151,26 @@ def cli() -> None:
 
 @cli.command()
 @click.argument("file", type=click.Path(exists=True))
+@click.option("--vendor", default="openai", help="Provider id")
 @click.option(
     "--api-key",
-    envvar="OPENAI_API_KEY",
-    required=True,
-    help="OpenAI API key (or OPENAI_API_KEY env)",
+    envvar="API_KEY",
+    required=False,
+    default="",
+    help="Provider API key (or API_KEY env); not required for keyless providers",
 )
-@click.option("--model", default="gpt-4o-mini", help="Model name")
+@click.option("--model", required=True, help="Model name (must exist in the provider model list)")
+@click.option("--base-url", default="", help="Override provider API base URL")
 @click.option("--source-lang", default="en", help="Source language code")
 @click.option("--target-lang", default="vi", help="Target language code")
 @click.option("--category", default="general", help="Book category for prompt routing")
 @click.option("--db-path", default=None, help="Custom database path")
 def translate(
     file: str,
+    vendor: str,
     api_key: str,
     model: str,
+    base_url: str,
     source_lang: str,
     target_lang: str,
     category: str,
@@ -167,9 +182,26 @@ def translate(
         handlers=[RichHandler(rich_tracebacks=True, console=console)],
         format="%(message)s",
     )
+    from ebook_translator.translator.adapters import VENDORS
+
+    vendor_info = VENDORS.get(vendor)
+    if vendor_info is None:
+        raise click.ClickException(f"Unknown provider: {vendor}")
+    if vendor_info.requires_api_key and not api_key:
+        raise click.ClickException(f"Provider {vendor} requires an API key")
+    resolved_base_url = base_url or vendor_info.base_url
+
     asyncio.run(
         _translate_flow(
-            file, api_key, model, source_lang, target_lang, category, db_path
+            file,
+            vendor,
+            api_key,
+            model,
+            resolved_base_url,
+            source_lang,
+            target_lang,
+            category,
+            db_path,
         )
     )
 

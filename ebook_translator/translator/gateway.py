@@ -21,7 +21,7 @@ class LLMConfig:
         return LLMConfig(
             vendor=self.vendor,
             api_key=self.api_key,
-            model=self.model or (vendor.default_model if vendor else "gpt-4o-mini"),
+            model=self.model or (vendor.default_model if vendor else ""),
             base_url=self.base_url or (vendor.base_url if vendor else ""),
         )
 

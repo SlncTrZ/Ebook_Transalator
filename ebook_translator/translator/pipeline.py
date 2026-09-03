@@ -46,12 +46,10 @@ class TranslationConfig:
     request_timeout: int = 120
 
     def __post_init__(self) -> None:
-        """Auto-fill base_url + default model tu vendor."""
+        """Auto-fill only the provider base URL; model selection must be explicit."""
         v = VENDORS.get(self.vendor)
         if v:
             self.base_url = self.base_url or v.base_url
-            if not self.model:
-                self.model = v.default_model
         if self.category is not None and not isinstance(self.category, BookCategory):
             try:
                 self.category = BookCategory(self.category)

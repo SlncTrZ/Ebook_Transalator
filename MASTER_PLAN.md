@@ -66,6 +66,8 @@ Rules:
 - SHA-256 content fingerprints and prompt-context fingerprints.
 - Unified LLM Gateway for Standard, Agentic, and Research paths.
 - Vendor adapters for OpenAI-compatible APIs, Anthropic, Gemini, and Ollama.
+- Every provider exposes an editable API Base URL; the configured URL is propagated through Research, Standard, Agentic, model discovery, connection testing, and CLI execution.
+- Model selection is explicit and provider-sourced: no hard-coded model fallback remains; model lists are fetched live from provider APIs (including remote Ollama `/api/tags`, Anthropic/Gemini pagination, and OpenAI-compatible `/models`).
 - Category-aware Standard and Agentic prompting.
 - Bounded long-form neighborhood context using canonical adjacent chunks.
 - Exact response cache separated from user-approved Translation Memory.
@@ -78,7 +80,7 @@ Rules:
 - Source-preserving EPUB export retaining non-translated archive resources, CSS/assets, package structure, spine/TOC resources, and segmented paragraph reconstruction.
 - Retry policy limited to transient network/timeout/429/5xx-style provider failures; permanent client errors fail fast.
 - Desktop-oriented workbench UI using the project-local Design Taste guardrails.
-- Backend regression suite verified at **81 passing tests**, including complex EPUB round-trip and 2,500-chunk resume/progress stress coverage.
+- Backend regression suite verified at **85 passing tests**, including complex EPUB round-trip, 2,500-chunk resume/progress stress coverage, remote Ollama model discovery, and explicit-provider-model routing.
 - Frontend TypeScript compile verified passing.
 
 ### Release blockers / not yet verified

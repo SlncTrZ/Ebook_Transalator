@@ -1,7 +1,8 @@
-"""P0.2 tests for the unified LLM gateway and vendor routing."""
+"""Tests for the unified LLM gateway, provider routing, and live model discovery."""
 
 from __future__ import annotations
 
+import httpx
 import pytest
 
 from ebook_translator.translator.adapters import (
@@ -32,11 +33,97 @@ def test_create_adapter_routes_vendor(vendor: str, expected_type: type) -> None:
     assert isinstance(adapter, expected_type)
 
 
-def test_gateway_resolves_vendor_defaults() -> None:
+def test_gateway_uses_provider_base_url_but_never_hardcodes_model() -> None:
     gateway = LLMGateway(LLMConfig(vendor="anthropic", api_key="key"))
     assert gateway.config.vendor == "anthropic"
-    assert gateway.config.model == "claude-3-haiku-20240307"
+    assert gateway.config.model == ""
     assert gateway.config.base_url == "https://api.anthropic.com/v1"
+
+
+def test_custom_base_url_is_preserved_and_trailing_slash_is_normalized() -> None:
+    adapter = create_adapter(
+        "ollama",
+        "",
+        "qwen-test",
+        "http://192.168.1.171:11434/",
+    )
+    assert adapter.base_url == "http://192.168.1.171:11434"
+    assert adapter.model == "qwen-test"
+
+
+@pytest.mark.asyncio
+async def test_ollama_models_are_fetched_from_configured_remote_host(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[str] = []
+
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict:
+            return {
+                "models": [
+                    {"name": "qwen3:14b"},
+                    {"name": "gemma3:12b"},
+                ]
+            }
+
+    class FakeClient:
+        async def __aenter__(self) -> "FakeClient":
+            return self
+
+        async def __aexit__(self, *_: object) -> None:
+            return None
+
+        async def get(self, url: str, **_: object) -> FakeResponse:
+            calls.append(url)
+            return FakeResponse()
+
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **_: FakeClient())
+    adapter = OllamaAdapter("", "", "http://192.168.1.171:11434/")
+
+    models = await adapter.fetch_models()
+
+    assert calls == ["http://192.168.1.171:11434/api/tags"]
+    assert models == ["qwen3:14b", "gemma3:12b"]
+
+
+@pytest.mark.asyncio
+async def test_openai_compatible_model_discovery_returns_provider_ids_unfiltered(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    class FakeResponse:
+        def raise_for_status(self) -> None:
+            return None
+
+        def json(self) -> dict:
+            return {
+                "data": [
+                    {"id": "chat-model"},
+                    {"id": "embedding-model"},
+                    {"id": "provider-special-model"},
+                ]
+            }
+
+    class FakeClient:
+        async def __aenter__(self) -> "FakeClient":
+            return self
+
+        async def __aexit__(self, *_: object) -> None:
+            return None
+
+        async def get(self, *_: object, **__: object) -> FakeResponse:
+            return FakeResponse()
+
+    monkeypatch.setattr(httpx, "AsyncClient", lambda **_: FakeClient())
+    adapter = OpenAICompatibleAdapter("key", "", "https://provider.example/v1")
+
+    assert await adapter.fetch_models() == [
+        "chat-model",
+        "embedding-model",
+        "provider-special-model",
+    ]
 
 
 @pytest.mark.asyncio

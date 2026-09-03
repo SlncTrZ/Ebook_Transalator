@@ -13,6 +13,8 @@ Việc còn lại trước `v1.0-rc1` là **full packaged pipeline validation b�
 - [x] Explicit Standard / Agentic routing.
 - [x] Unified LLM Gateway cho Standard, Agentic và Research.
 - [x] Multi-vendor adapters: OpenAI-compatible, Anthropic, Gemini, Ollama.
+- [x] Editable API Base URL for every provider, including remote Ollama hosts such as `http://192.168.1.x:11434`.
+- [x] Live provider model discovery only; no hard-coded model fallback or cached model-list bypass.
 - [x] Category-aware prompting.
 - [x] Bounded neighboring translation context.
 - [x] Book-scoped glossary.
@@ -68,7 +70,7 @@ Việc còn lại trước `v1.0-rc1` là **full packaged pipeline validation b�
 
 ### Automated validation
 
-- [x] Backend regression suite: **81 passing tests**.
+- [x] Backend regression suite: **85 passing tests**.
 - [x] Complex EPUB release-corpus test.
 - [x] 2,500-chunk progress/resume stress test.
 - [x] TypeScript compile PASS.

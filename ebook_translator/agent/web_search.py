@@ -88,7 +88,7 @@ Excerpt: "Harry Potter and the Sorcerer's Stone" -> title: "Harry Potter and the
 async def extract_metadata(
     preview: str,
     api_key: str,
-    model: str = "gpt-4o-mini",
+    model: str = "",
     base_url: str = "",
     vendor: str = "openai",
     user_feedback: str = "",

@@ -95,7 +95,7 @@ Workflow
 
 Standard, Agentic và Research không được hard-code provider HTTP path riêng.
 
-Gateway hiện hỗ trợ OpenAI-compatible providers, Anthropic, Gemini và Ollama.
+Gateway hiện hỗ trợ OpenAI-compatible providers, Anthropic, Gemini và Ollama. Mọi provider có editable API Base URL. Model selection không có hard-coded fallback: UI/CLI phải dùng model được provider trả về qua live model discovery; remote Ollama dùng chính Base URL đã cấu hình và `/api/tags`.
 
 ### 3.5 Translation Pipelines
 
