@@ -1,4 +1,7 @@
-"""Bounded long-form translation context construction."""
+"""Bounded long-form translation context construction.
+
+Updated: 2026-10-08 19:05
+"""
 
 from __future__ import annotations
 
@@ -10,11 +13,24 @@ from ebook_translator.models import Chunk
 
 @dataclass(frozen=True)
 class TranslationContext:
+    """Chứa ngữ cảnh đoạn văn bản trước và sau phục vụ dịch thuật.
+
+    Attributes:
+        previous_source: Đoạn nguồn liền trước.
+        previous_translation: Bản dịch đã hoàn thành của đoạn liền trước.
+        next_source: Đoạn nguồn liền sau.
+    """
+
     previous_source: str = ""
     previous_translation: str = ""
     next_source: str = ""
 
     def render(self) -> str:
+        """Format ngữ cảnh thành chuỗi văn bản cho prompt dịch thuật.
+
+        Returns:
+            Chuỗi ngữ cảnh đã định dạng theo các mục [Previous Context] và [Next Source Context].
+        """
         sections: list[str] = []
         if self.previous_source or self.previous_translation:
             block = "[Previous Context]"
@@ -32,10 +48,30 @@ class ContextBuilder:
     """Build small deterministic neighborhood context from canonical chunks."""
 
     def __init__(self, db: Database, max_chars: int = 2400) -> None:
+        """Khởi tạo ContextBuilder với database connection và giới hạn ký tự.
+
+        Args:
+            db: Đối tượng Database quản lý kết nối cơ sở dữ liệu.
+            max_chars: Ngưỡng ký tự tối đa cho ngữ cảnh (tối thiểu 256).
+
+        Side-effects:
+            Lưu tham chiếu db và thiết lập giới hạn max_chars trong instance.
+        """
         self._db = db
         self._max_chars = max(256, max_chars)
 
     async def build_for_chunk(self, chunk: Chunk) -> TranslationContext:
+        """Truy vấn các chunk lân cận trong cùng chương và tạo TranslationContext bị giới hạn kích thước.
+
+        Args:
+            chunk: Chunk mục tiêu cần dựng ngữ cảnh.
+
+        Returns:
+            Đối tượng TranslationContext chứa ngữ cảnh trước/sau đã được rút gọn theo ngân sách max_chars.
+
+        Side-effects:
+            Thực hiện truy vấn bất đồng bộ SELECT từ bảng chunks trong cơ sở dữ liệu.
+        """
         try:
             connection = self._db.conn
         except (AttributeError, RuntimeError):
