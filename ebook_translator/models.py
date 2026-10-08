@@ -1,6 +1,6 @@
 """Data Models — Pydantic for type safety and validation.
 
-Wing: tcdserver | Topic: ebook_translator | Updated: 2026-07-22 14:00
+Wing: tcdserver | Topic: ebook_translator | Updated: 2026-10-08 19:16
 """
 
 from __future__ import annotations
@@ -10,12 +10,16 @@ from enum import Enum
 
 
 class ChunkStatus(str, Enum):
+    """Trạng thái xử lý của đơn vị dịch (chunk)."""
+
     PENDING = "pending"
     DONE = "done"
     FAILED = "failed"
 
 
 class BookCategory(str, Enum):
+    """Thể loại sách dùng để phân loại và định hình ngữ cảnh dịch."""
+
     LITERATURE = "van_hoc"
     HISTORY = "lich_su"
     MODERN = "hien_dai"
@@ -48,6 +52,11 @@ class Book:
     failed_chunks: int = 0
 
     def __post_init__(self) -> None:
+        """Kiểm tra và ép kiểu thuộc tính category về BookCategory Enum.
+
+        Returns:
+            None.
+        """
         if not isinstance(self.category, BookCategory):
             try:
                 self.category = BookCategory(self.category)
