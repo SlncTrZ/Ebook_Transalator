@@ -1,4 +1,7 @@
-"""Unified LLM gateway for Standard, Research, and Agentic workflows."""
+"""Unified LLM gateway for Standard, Research, and Agentic workflows.
+
+Updated: 2026-10-08 19:12
+"""
 
 from __future__ import annotations
 
@@ -11,12 +14,26 @@ from ebook_translator.translator.metrics import record_provider_call
 
 @dataclass
 class LLMConfig:
+    """Cấu hình kết nối cho LLM provider.
+
+    Attributes:
+        vendor: Tên nhà cung cấp dịch vụ LLM.
+        api_key: Khóa API để xác thực.
+        model: Tên mô hình cần sử dụng.
+        base_url: Đường dẫn API gốc.
+    """
+
     vendor: str = "openai"
     api_key: str = ""
     model: str = ""
     base_url: str = ""
 
     def resolved(self) -> "LLMConfig":
+        """Trả về cấu hình mới với model và base_url mặc định từ vendor nếu chưa được chỉ định.
+
+        Returns:
+            LLMConfig: Đối tượng cấu hình đã chuẩn hóa.
+        """
         vendor = VENDORS.get(self.vendor)
         return LLMConfig(
             vendor=self.vendor,
@@ -27,9 +44,14 @@ class LLMConfig:
 
 
 class LLMGateway:
-    """One provider-agnostic entry point for model generation."""
+    """Cổng kết nối độc lập với provider để tạo văn bản từ mô hình LLM."""
 
     def __init__(self, config: LLMConfig) -> None:
+        """Khởi tạo gateway và adapter xử lý dựa trên cấu hình truyền vào.
+
+        Args:
+            config: Cấu hình LLMConfig.
+        """
         self.config = config.resolved()
         self.adapter: BaseAdapter = create_adapter(
             vendor_id=self.config.vendor,
@@ -45,6 +67,16 @@ class LLMGateway:
         temperature: float = 0.3,
         response_format: dict | None = None,
     ) -> str:
+        """Gửi danh sách tin nhắn tới adapter để sinh nội dung và đo lường thời gian thực thi.
+
+        Args:
+            messages: Danh sách tin nhắn đầu vào dạng dict.
+            temperature: Tham số kiểm soát độ ngẫu nhiên khi sinh văn bản.
+            response_format: Cấu trúc định dạng phản hồi mong muốn (tùy chọn).
+
+        Returns:
+            str: Chuỗi văn bản phản hồi từ mô hình.
+        """
         started = perf_counter()
         try:
             result = await self.adapter.translate(
