@@ -1,6 +1,6 @@
 """EPUB parser — uses ebooklib + BeautifulSoup.
 
-Wing: tcdserver | Topic: ebook_translator | Updated: 2026-07-22 14:00
+Wing: tcdserver | Topic: ebook_translator | Updated: 2026-10-08 19:59
 """
 
 from __future__ import annotations
@@ -15,6 +15,16 @@ class EpubParser(BaseParser):
     """Parse .epub files into chapters and paragraphs."""
 
     def parse(self, file_path: str) -> ParsedBook:
+        """Đọc file EPUB, trích metadata và nội dung theo chương.
+
+        Args:
+            file_path: Đường dẫn file .epub.
+
+        Returns:
+            ParsedBook với tiêu đề/tác giả/ngôn ngữ từ metadata DC
+            và mỗi document item (type 9) có đoạn văn trích từ thẻ
+            p, h1-h6 thành một chương.
+        """
         book = epub.read_epub(file_path)
         parsed = ParsedBook()
 
