@@ -1,4 +1,7 @@
-"""Deterministic translation QA rules for local workbench inspection."""
+"""Deterministic translation QA rules for local workbench inspection.
+
+Wing: code | Topic: qa | Updated: 2026-10-08 19:11
+"""
 
 from __future__ import annotations
 
@@ -10,6 +13,16 @@ from ebook_translator.models import GlossaryEntry
 
 @dataclass(frozen=True)
 class QAIssue:
+    """Biểu diễn một lỗi hoặc cảnh báo QA được phát hiện trong quá trình kiểm tra bản dịch.
+
+    Attributes:
+        code: Mã định danh quy tắc QA.
+        severity: Mức độ nghiêm trọng ("error" hoặc "warning").
+        message: Thông báo mô tả chi tiết vấn đề QA.
+        expected: Giá trị kỳ vọng.
+        actual: Giá trị thực tế nhận được.
+    """
+
     code: str
     severity: str
     message: str
@@ -19,10 +32,21 @@ class QAIssue:
 
 @dataclass(frozen=True)
 class QAResult:
+    """Kết quả kiểm tra QA chứa danh sách các vấn đề được phát hiện.
+
+    Attributes:
+        issues: Tuple các đối tượng QAIssue thu được từ quá trình kiểm tra.
+    """
+
     issues: tuple[QAIssue, ...]
 
     @property
     def passed(self) -> bool:
+        """Kiểm tra bản dịch có đạt tiêu chuẩn hay không.
+
+        Returns:
+            True nếu không có vấn đề nào có severity là "error", ngược lại False.
+        """
         return not any(issue.severity == "error" for issue in self.issues)
 
 
@@ -35,6 +59,16 @@ def check_translation(
     translated: str,
     glossary: list[GlossaryEntry] | None = None,
 ) -> QAResult:
+    """Kiểm tra chất lượng bản dịch dựa trên các quy tắc QA cố định.
+
+    Args:
+        source: Chuỗi văn bản nguồn.
+        translated: Chuỗi văn bản đã dịch.
+        glossary: Danh sách thuật ngữ GlossaryEntry cần kiểm tra tuân thủ (tùy chọn).
+
+    Returns:
+        QAResult chứa danh sách các QAIssue phát hiện được.
+    """
     issues: list[QAIssue] = []
     source_clean = source.strip()
     translated_clean = translated.strip()
