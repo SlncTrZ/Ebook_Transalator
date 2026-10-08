@@ -1,6 +1,6 @@
 """Translation pipeline — cache-first, retry with exponential backoff (vendor-agnostic).
 
-Wing: tcdserver | Topic: ebook_translator | Updated: 2026-07-22 14:00
+Wing: tcdserver | Topic: ebook_translator | Updated: 2026-10-08 20:04
 """
 
 from __future__ import annotations
@@ -72,6 +72,19 @@ class TranslationPipeline:
     """Manages the async translation loop with cache and retry (vendor-agnostic)."""
 
     def __init__(self, db: Database, config: TranslationConfig) -> None:
+        """Khởi tạo pipeline với Database và cấu hình dịch.
+
+        Params:
+            db: Đối tượng Database dùng cho cache, chunk và glossary.
+            config: TranslationConfig chứa vendor, api_key, model, base_url.
+
+        Returns:
+            None.
+
+        Side-effects:
+            Khởi tạo LLMGateway từ LLMConfig (vendor/api_key/model/base_url
+            lấy từ config), dict cache thể loại sách rỗng và ContextBuilder(db).
+        """
         self._db = db
         self._config = config
         self._gateway = LLMGateway(
@@ -86,6 +99,14 @@ class TranslationPipeline:
         self._context_builder = ContextBuilder(db)
 
     async def close(self) -> None:
+        """Đóng pipeline (hiện không giải phóng tài nguyên).
+
+        Params:
+            Không có.
+
+        Returns:
+            None.
+        """
         pass
 
     def _build_user_prompt(
