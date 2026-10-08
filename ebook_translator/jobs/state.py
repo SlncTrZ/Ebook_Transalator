@@ -1,4 +1,7 @@
-"""Explicit translation-job lifecycle rules."""
+"""Explicit translation-job lifecycle rules.
+
+Updated: 2026-10-08 19:16
+"""
 
 from __future__ import annotations
 
@@ -6,6 +9,8 @@ from enum import StrEnum
 
 
 class JobStatus(StrEnum):
+    """Enum biểu diễn các trạng thái vòng đời của tác vụ dịch."""
+
     PENDING = "pending"
     RUNNING = "running"
     PAUSED = "paused"
@@ -39,6 +44,17 @@ class IllegalJobTransition(ValueError):
 
 
 def parse_job_status(value: str | JobStatus) -> JobStatus:
+    """Chuyển đổi chuỗi hoặc JobStatus sang đối tượng JobStatus hợp lệ.
+
+    Args:
+        value: Chuỗi giá trị hoặc đối tượng JobStatus.
+
+    Returns:
+        Đối tượng JobStatus tương ứng với đầu vào.
+
+    Raises:
+        IllegalJobTransition: Nếu giá trị đầu vào không phải là trạng thái hợp lệ.
+    """
     if isinstance(value, JobStatus):
         return value
     try:
@@ -48,6 +64,15 @@ def parse_job_status(value: str | JobStatus) -> JobStatus:
 
 
 def assert_job_transition(current: str | JobStatus, target: str | JobStatus) -> None:
+    """Kiểm tra tính hợp lệ của việc chuyển trạng thái tác vụ.
+
+    Args:
+        current: Trạng thái hiện tại của tác vụ.
+        target: Trạng thái đích muốn chuyển tới.
+
+    Raises:
+        IllegalJobTransition: Nếu việc chuyển từ current sang target vi phạm quy tắc chuyển trạng thái.
+    """
     source = parse_job_status(current)
     destination = parse_job_status(target)
     if destination not in LEGAL_TRANSITIONS[source]:
@@ -55,5 +80,13 @@ def assert_job_transition(current: str | JobStatus, target: str | JobStatus) -> 
 
 
 def is_terminal(status: str | JobStatus) -> bool:
+    """Kiểm tra xem trạng thái tác vụ có phải là trạng thái kết thúc hay không.
+
+    Args:
+        status: Trạng thái tác vụ dạng chuỗi hoặc JobStatus.
+
+    Returns:
+        True nếu trạng thái là CANCELLED hoặc DONE, ngược lại trả về False.
+    """
     value = parse_job_status(status)
     return value in {JobStatus.CANCELLED, JobStatus.DONE}
