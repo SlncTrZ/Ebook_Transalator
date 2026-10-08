@@ -4,7 +4,7 @@ Mỗi vendor implement 2 method:
 - translate(messages) -> str
 - fetch_models() -> list[str]  (lấy danh sách model thật từ API)
 
-Wing: tcdserver | Topic: ebook_translator | Updated: 2026-07-22 14:00
+Wing: tcdserver | Topic: ebook_translator | Updated: 2026-10-08 19:04
 """
 
 from __future__ import annotations
@@ -89,6 +89,16 @@ class BaseAdapter(ABC):
     """Abstract adapter — mỗi vendor implement riêng."""
 
     def __init__(self, api_key: str, model: str, base_url: str) -> None:
+        """Khởi tạo BaseAdapter với khóa API, mô hình dịch và URL gốc dịch vụ.
+
+        Args:
+            api_key: Khóa xác thực API của vendor.
+            model: Tên mô hình AI được sử dụng.
+            base_url: URL cơ sở của API (tự động loại bỏ dấu / ở cuối).
+
+        Side-effects:
+            Gán các thuộc tính api_key, model và base_url vào instance.
+        """
         self.api_key = api_key
         self.model = model
         self.base_url = base_url.rstrip("/")
@@ -100,7 +110,21 @@ class BaseAdapter(ABC):
         *,
         temperature: float = 0.3,
         response_format: dict | None = None,
-    ) -> str: ...
+    ) -> str:
+        """Gửi yêu cầu dịch bất đồng bộ tới vendor API.
+
+        Args:
+            messages: Danh sách các dict chứa tin nhắn hội thoại (role, content).
+            temperature: Tham số kiểm soát độ sáng tạo/ngẫu nhiên (mặc định 0.3).
+            response_format: Cấu hình định dạng đầu ra mong muốn (nếu có).
+
+        Returns:
+            Văn bản phản hồi từ mô hình AI.
+
+        Side-effects:
+            Thực hiện yêu cầu I/O mạng bất đồng bộ tới vendor API trong các lớp con.
+        """
+        ...
 
     @abstractmethod
     async def fetch_models(self) -> list[str]:
@@ -121,6 +145,20 @@ class OpenAICompatibleAdapter(BaseAdapter):
         temperature: float = 0.3,
         response_format: dict | None = None,
     ) -> str:
+        """Gửi yêu cầu tạo hoàn thành hội thoại tới endpoint /chat/completions theo chuẩn OpenAI API.
+
+        Args:
+            messages: Danh sách tin nhắn dạng dict với thông tin role và content.
+            temperature: Độ ngẫu nhiên của câu trả lời (mặc định 0.3).
+            response_format: Tham số tùy chỉnh định dạng phản hồi (vd: JSON mode).
+
+        Returns:
+            Văn bản phản hồi đã loại bỏ khoảng trắng thừa hai đầu.
+
+        Side-effects:
+            Gửi truy vấn HTTP POST bất đồng bộ tới endpoint /chat/completions qua httpx.AsyncClient.
+            Bắn ngoại lệ httpx.HTTPStatusError nếu API trả về mã lỗi HTTP.
+        """
         import httpx
 
         async with httpx.AsyncClient(timeout=120) as client:
@@ -164,7 +202,7 @@ class OpenAICompatibleAdapter(BaseAdapter):
 
 
 class OllamaAdapter(BaseAdapter):
-    """Adapter rieng cho Ollama (API local, format khac)."""
+    """Adapter riêng cho Ollama (API local, format khác)."""
 
     async def translate(
         self,
@@ -173,6 +211,20 @@ class OllamaAdapter(BaseAdapter):
         temperature: float = 0.3,
         response_format: dict | None = None,
     ) -> str:
+        """Chuyển đổi tin nhắn hội thoại thành prompt Ollama và gửi yêu cầu sinh văn bản.
+
+        Args:
+            messages: Danh sách tin nhắn hội thoại cần gom thành prompt duy nhất.
+            temperature: Tham số ngẫu nhiên truyền vào options của Ollama (mặc định 0.3).
+            response_format: Tham số định dạng (không được xử lý trực tiếp bởi adapter này).
+
+        Returns:
+            Văn bản phản hồi từ mô hình Ollama cục bộ.
+
+        Side-effects:
+            Gửi truy vấn HTTP POST bất đồng bộ tới endpoint /api/generate qua httpx.AsyncClient.
+            Bắn ngoại lệ httpx.HTTPStatusError nếu có lỗi kết nối hoặc HTTP.
+        """
         import httpx
 
         # Chuyen doi messages -> Ollama prompt format
@@ -202,6 +254,15 @@ class OllamaAdapter(BaseAdapter):
             return data.get("response", "").strip()
 
     async def fetch_models(self) -> list[str]:
+        """Truy vấn danh sách các mô hình khả dụng từ instance Ollama cục bộ.
+
+        Returns:
+            Danh sách tên các mô hình (dựa trên trường 'name' trong kết quả /api/tags).
+
+        Side-effects:
+            Gửi truy vấn HTTP GET bất đồng bộ tới endpoint /api/tags qua httpx.AsyncClient.
+            Bắn ngoại lệ httpx.HTTPStatusError nếu có lỗi HTTP.
+        """
         import httpx
 
         async with httpx.AsyncClient(timeout=5) as client:
@@ -214,7 +275,7 @@ class OllamaAdapter(BaseAdapter):
 
 
 class AnthropicAdapter(BaseAdapter):
-    """Adapter rieng cho Anthropic Claude API."""
+    """Adapter riêng cho Anthropic Claude API."""
 
     async def translate(
         self,
@@ -223,6 +284,20 @@ class AnthropicAdapter(BaseAdapter):
         temperature: float = 0.3,
         response_format: dict | None = None,
     ) -> str:
+        """Tách tin nhắn system và gửi yêu cầu hoàn thành tới endpoint /messages của Anthropic.
+
+        Args:
+            messages: Danh sách các tin nhắn hội thoại (system, user, assistant).
+            temperature: Tham số ngẫu nhiên của phản hồi (mặc định 0.3).
+            response_format: Không áp dụng trực tiếp cho Anthropic adapter.
+
+        Returns:
+            Văn bản trả về từ khối phản hồi đầu tiên của mô hình Claude.
+
+        Side-effects:
+            Gửi truy vấn HTTP POST bất đồng bộ tới endpoint /messages với header x-api-key.
+            Bắn ngoại lệ httpx.HTTPStatusError nếu API báo lỗi.
+        """
         import httpx
 
         system = ""
@@ -257,6 +332,15 @@ class AnthropicAdapter(BaseAdapter):
             return data["content"][0]["text"].strip()
 
     async def fetch_models(self) -> list[str]:
+        """Lấy toàn bộ danh sách mô hình từ Anthropic API bằng cơ chế phân trang.
+
+        Returns:
+            Danh sách chuỗi các ID mô hình do Anthropic cung cấp.
+
+        Side-effects:
+            Thực hiện liên tiếp các truy vấn HTTP GET phân trang (tối đa 20 trang) qua httpx.AsyncClient.
+            Bắn ngoại lệ httpx.HTTPStatusError nếu xảy ra lỗi mạng hoặc HTTP.
+        """
         import httpx
 
         models: list[str] = []
@@ -289,7 +373,7 @@ class AnthropicAdapter(BaseAdapter):
 
 
 class GeminiAdapter(BaseAdapter):
-    """Adapter rieng cho Google Gemini API."""
+    """Adapter riêng cho Google Gemini API."""
 
     async def translate(
         self,
@@ -298,6 +382,20 @@ class GeminiAdapter(BaseAdapter):
         temperature: float = 0.3,
         response_format: dict | None = None,
     ) -> str:
+        """Chuyển đổi messages sang định dạng Gemini REST API và gửi yêu cầu sinh nội dung.
+
+        Args:
+            messages: Danh sách tin nhắn (system sẽ chuyển thành system_instruction, user/assistant thành contents).
+            temperature: Tham số ngẫu nhiên nằm trong generationConfig (mặc định 0.3).
+            response_format: Không áp dụng trực tiếp trong adapter này.
+
+        Returns:
+            Nội dung văn bản được phản hồi từ candidate đầu tiên của Gemini.
+
+        Side-effects:
+            Gửi truy vấn HTTP POST bất đồng bộ tới endpoint :generateContent với api_key trong URL query.
+            Bắn ngoại lệ httpx.HTTPStatusError nếu yêu cầu thất bại.
+        """
         import httpx
 
         system = ""
@@ -324,6 +422,15 @@ class GeminiAdapter(BaseAdapter):
             return data["candidates"][0]["content"]["parts"][0]["text"].strip()
 
     async def fetch_models(self) -> list[str]:
+        """Lấy danh sách các mô hình khả dụng từ Gemini REST API qua truy vấn phân trang.
+
+        Returns:
+            Danh sách tên các mô hình Gemini (đã loại bỏ tiền tố 'models/').
+
+        Side-effects:
+            Thực hiện các truy vấn HTTP GET phân trang (dùng pageToken) tới endpoint /models qua httpx.AsyncClient.
+            Bắn ngoại lệ httpx.HTTPStatusError nếu có lỗi API.
+        """
         import httpx
 
         models: list[str] = []
@@ -353,7 +460,20 @@ class GeminiAdapter(BaseAdapter):
 def create_adapter(
     vendor_id: str, api_key: str, model: str, base_url: str | None = None
 ) -> BaseAdapter:
-    """Tao adapter phu hop voi vendor."""
+    """Tạo đối tượng adapter tương ứng với vendor_id chỉ định.
+
+    Args:
+        vendor_id: Mã nhận dạng vendor (vd: 'anthropic', 'google', 'ollama', 'openai', ...).
+        api_key: Khóa API sử dụng cho adapter.
+        model: Tên mô hình mặc định hoặc được chọn.
+        base_url: URL cơ sở tùy chỉnh cho endpoint (nếu None sẽ dùng URL mặc định của vendor).
+
+    Returns:
+        Instance của lớp con BaseAdapter phù hợp với vendor (AnthropicAdapter, GeminiAdapter, OllamaAdapter hoặc OpenAICompatibleAdapter).
+
+    Side-effects:
+        Không có side-effect mạng hay sửa đổi trạng thái bên ngoài.
+    """
     vendor = VENDORS.get(vendor_id)
     url = base_url or (vendor.base_url if vendor else "")
 
