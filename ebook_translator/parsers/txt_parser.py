@@ -1,6 +1,6 @@
 """TXT parser — auto-detect encoding, heuristic chapter split.
 
-Wing: tcdserver | Topic: ebook_translator | Updated: 2026-07-22 14:00
+Wing: tcdserver | Topic: ebook_translator | Updated: 2026-10-08 19:59
 """
 
 from __future__ import annotations
@@ -96,6 +96,16 @@ class TxtParser(BaseParser):
         return best_enc
 
     def parse(self, file_path: str) -> ParsedBook:
+        """Đọc file TXT, tách đoạn văn và chia chương theo heuristic.
+
+        Args:
+            file_path: Đường dẫn file .txt.
+
+        Returns:
+            ParsedBook với tiêu đề lấy từ tên file, danh sách chương
+            tách tại dòng khớp _CHAPTER_PATTERNS, encoding ghi trong
+            raw_metadata.
+        """
         enc = self._detect_encoding(file_path)
         try:
             with open(file_path, encoding=enc, errors="replace") as f:
