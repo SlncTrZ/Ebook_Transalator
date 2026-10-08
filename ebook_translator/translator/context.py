@@ -1,6 +1,6 @@
 """Bounded long-form translation context construction.
 
-Updated: 2026-10-08 19:05
+Updated: 2026-10-08 20:04
 """
 
 from __future__ import annotations
@@ -117,6 +117,17 @@ class ContextBuilder:
         remaining = self._max_chars
 
         def take(text: str, budget: int) -> str:
+            """Cắt chuỗi theo ngân sách ký tự với dấu ellipsis.
+
+            Params:
+                text: Chuỗi nguồn cần cắt.
+                budget: Ngân sách ký tự tối đa (kể cả ký tự "…").
+
+            Returns:
+                Chuỗi rỗng khi text rỗng hoặc budget <= 0; nguyên văn text
+                khi len(text) <= budget; ngược lại cắt text[:budget-1],
+                rstrip khoảng trắng và thêm "…".
+            """
             if not text or budget <= 0:
                 return ""
             if len(text) <= budget:
