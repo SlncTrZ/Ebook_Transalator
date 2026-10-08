@@ -45,10 +45,25 @@ _cancel_event = asyncio.Event()
 
 
 class ImportBookRequest(BaseModel):
+    """Model dữ liệu yêu cầu nhập sách từ đường dẫn đĩa cục bộ.
+
+    Attributes:
+        file_path: Đường dẫn tới file sách cần nhập (.epub, .txt).
+    """
+
     file_path: str
 
 
 class TestConnectionRequest(BaseModel):
+    """Model dữ liệu yêu cầu kiểm tra kết nối API vendor AI hoặc lấy danh sách model.
+
+    Attributes:
+        vendor: Tên vendor AI (mặc định "openai").
+        api_key: Khóa API kết nối.
+        model: Tên mô hình AI.
+        base_url: Đường dẫn URL tùy chỉnh của API endpoint.
+    """
+
     vendor: str = "openai"
     api_key: str = ""
     model: str = ""
@@ -56,6 +71,15 @@ class TestConnectionRequest(BaseModel):
 
 
 class VendorConfigRequest(BaseModel):
+    """Model dữ liệu cấu hình thông tin nhà cung cấp API AI.
+
+    Attributes:
+        vendor: Tên nhà cung cấp AI.
+        api_key: Khóa API kết nối.
+        model: Tên mô hình mặc định.
+        base_url: Đường dẫn API endpoint tùy chỉnh.
+    """
+
     vendor: str = "openai"
     api_key: str = ""
     model: str = ""
@@ -63,6 +87,15 @@ class VendorConfigRequest(BaseModel):
 
 
 class CreateGlossaryRequest(BaseModel):
+    """Model dữ liệu yêu cầu tạo mới mục thuật ngữ trong glossary.
+
+    Attributes:
+        book_id: ID cuốn sách liên quan.
+        source_term: Thuật ngữ ngôn ngữ gốc.
+        target_term: Thuật ngữ dịch sang ngôn ngữ đích.
+        notes: Ghi chú bổ sung (tùy chọn).
+    """
+
     book_id: int
     source_term: str
     target_term: str
@@ -70,6 +103,17 @@ class CreateGlossaryRequest(BaseModel):
 
 
 class UpdateBookRequest(BaseModel):
+    """Model dữ liệu yêu cầu cập nhật thông tin metadata cuốn sách.
+
+    Attributes:
+        title: Tiêu đề gốc của sách.
+        author: Tác giả sách.
+        localized_title: Tiêu đề dịch/bản địa hóa.
+        category: Thể loại sách.
+        source_lang: Mã ngôn ngữ gốc.
+        target_lang: Mã ngôn ngữ đích.
+    """
+
     title: str | None = None
     author: str | None = None
     localized_title: str | None = None
@@ -79,10 +123,27 @@ class UpdateBookRequest(BaseModel):
 
 
 class UpdateChunkRequest(BaseModel):
+    """Model dữ liệu yêu cầu cập nhật văn bản dịch của một chunk.
+
+    Attributes:
+        translated_text: Đoạn văn bản dịch mới.
+    """
+
     translated_text: str
 
 
 class AnalyzeRequest(BaseModel):
+    """Model dữ liệu yêu cầu phân tích sách hoặc nghiên cứu thông tin qua Agent.
+
+    Attributes:
+        vendor: Tên nhà cung cấp AI.
+        api_key: Khóa API kết nối.
+        model: Tên mô hình AI sử dụng.
+        base_url: URL API tùy chỉnh.
+        user_feedback: Ý kiến/gợi ý bổ sung từ người dùng.
+        force_search: Bắt buộc tìm kiếm web lại hay không.
+    """
+
     vendor: str = "openai"
     api_key: str = ""
     model: str = ""
@@ -92,6 +153,22 @@ class AnalyzeRequest(BaseModel):
 
 
 class StartTranslateRequest(BaseModel):
+    """Model dữ liệu yêu cầu bắt đầu tiến trình dịch sách.
+
+    Attributes:
+        file_path: Đường dẫn file sách.
+        vendor: Tên nhà cung cấp AI.
+        api_key: Khóa API kết nối.
+        model: Tên mô hình AI.
+        source_lang: Ngôn ngữ gốc.
+        target_lang: Ngôn ngữ đích.
+        category: Thể loại sách.
+        base_url: URL API tùy chỉnh.
+        chapter_start: Chỉ số chương bắt đầu.
+        chapter_end: Chỉ số chương kết thúc.
+        agentic: Cờ bật chế độ dịch Agentic.
+    """
+
     file_path: str
     vendor: str = "openai"
     api_key: str = ""
@@ -106,11 +183,29 @@ class StartTranslateRequest(BaseModel):
 
 
 class ResumeJobRequest(BaseModel):
+    """Model dữ liệu yêu cầu tiếp tục công việc dịch bị tạm dừng.
+
+    Attributes:
+        api_key: Khóa API kết nối vendor.
+        base_url: URL API tùy chỉnh của vendor.
+    """
+
     api_key: str = ""
     base_url: str = ""
 
 
 class ConfirmMetadataRequest(BaseModel):
+    """Model dữ liệu xác nhận metadata sách do người dùng xem duyệt.
+
+    Attributes:
+        title: Tiêu đề sách.
+        author: Tác giả sách.
+        localized_title: Tiêu đề bản dịch.
+        source_lang: Ngôn ngữ gốc.
+        target_lang: Ngôn ngữ dịch.
+        category: Thể loại sách.
+    """
+
     title: str = ""
     author: str = ""
     localized_title: str = ""
@@ -120,6 +215,16 @@ class ConfirmMetadataRequest(BaseModel):
 
 
 class ExportBookRequest(BaseModel):
+    """Model dữ liệu yêu cầu xuất bản dịch sách ra tập tin.
+
+    Attributes:
+        output_path: Đường dẫn file xuất (tùy chọn).
+        mode: Chế độ xuất ("translated" hoặc "bilingual").
+        format: Định dạng xuất ("txt" hoặc "epub").
+        chapter_start: Chương bắt đầu xuất.
+        chapter_end: Chương kết thúc xuất.
+    """
+
     output_path: str = ""
     mode: str = "translated"
     format: str = "txt"
@@ -132,6 +237,17 @@ class ExportBookRequest(BaseModel):
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator:
+    """Quản lý vòng đời ứng dụng FastAPI: khởi tạo kết nối Database khi khởi động và đóng kết nối khi dừng.
+
+    Args:
+        app: Đối tượng ứng dụng FastAPI.
+
+    Yields:
+        AsyncGenerator: Generator bất đồng bộ cho lifespan context.
+
+    Side-effects:
+        Khởi tạo đối tượng Database toàn cục và thực hiện kết nối/đóng DB.
+    """
     global db
     db = Database(DB_PATH)
     await db.connect()
@@ -181,6 +297,14 @@ def _get_parser(file_path: str):
 
 @app.get("/api/books")
 async def list_books() -> list[dict]:
+    """Lấy danh sách tất cả các cuốn sách có trong cơ sở dữ liệu.
+
+    Returns:
+        list[dict]: Danh sách từ điển chứa thông tin các cuốn sách, sắp xếp theo ID giảm dần.
+
+    Side-effects:
+        Truy vấn bảng `books` trong cơ sở dữ liệu SQLite.
+    """
     d = _get_db()
     cursor = await d.conn.execute("SELECT * FROM books ORDER BY id DESC")
     rows = await cursor.fetchall()
@@ -189,6 +313,17 @@ async def list_books() -> list[dict]:
 
 @app.post("/api/books")
 async def create_book(req: ImportBookRequest) -> dict:
+    """Nhập sách mới từ đường dẫn file, phân tích các chương và lưu thông tin sách kèm các chunk vào cơ sở dữ liệu.
+
+    Args:
+        req: Chứa đường dẫn file sách cần nhập (`file_path`).
+
+    Returns:
+        dict: Thông tin cuốn sách mới được tạo bao gồm id, title, số lượng chunks và trạng thái ("pending").
+
+    Side-effects:
+        Đọc và phân tích file sách, ghi thông tin sách và các chunk vào DB; ném HTTPException (400) nếu lỗi định dạng hoặc parse.
+    """
     d = _get_db()
     parser = _get_parser(req.file_path)
     try:
@@ -218,7 +353,17 @@ async def create_book(req: ImportBookRequest) -> dict:
 
 @app.post("/api/books/upload")
 async def upload_book(file: UploadFile = File(...)) -> dict:
-    """Upload file -> save tam -> parse -> import."""
+    """Tải lên file sách (.epub hoặc .txt), lưu tạm thời trên đĩa, phân tích nội dung và khởi tạo sách trong cơ sở dữ liệu.
+
+    Args:
+        file: Tập tin sách tải lên từ yêu cầu của client.
+
+    Returns:
+        dict: Thông tin cuốn sách vừa tạo gồm id, title, số lượng chunks và trạng thái "pending".
+
+    Side-effects:
+        Ghi file tải lên vào thư mục tạm trên đĩa, đọc parse file, ghi bản ghi vào bảng `books` và `chunks` trong DB; ném HTTPException (400, 413, 500) khi gặp lỗi.
+    """
     if not file.filename:
         raise HTTPException(status_code=400, detail="No file provided")
 
@@ -292,6 +437,17 @@ async def upload_book(file: UploadFile = File(...)) -> dict:
 
 @app.get("/api/books/{book_id}")
 async def get_book(book_id: int) -> dict:
+    """Lấy thông tin chi tiết của một cuốn sách theo ID.
+
+    Args:
+        book_id: ID của cuốn sách cần tra cứu.
+
+    Returns:
+        dict: Các thuộc tính thông tin của cuốn sách.
+
+    Side-effects:
+        Truy vấn DB bảng `books`; ném HTTPException (404) nếu không tìm thấy sách.
+    """
     d = _get_db()
     book = await d.get_book(book_id)
     if book is None:
@@ -301,7 +457,17 @@ async def get_book(book_id: int) -> dict:
 
 @app.delete("/api/books/{book_id}")
 async def delete_book(book_id: int) -> dict:
-    """Xoa sach khoi thu vien."""
+    """Xóa cuốn sách và toàn bộ dữ liệu liên quan (glossary, chunks) khỏi cơ sở dữ liệu.
+
+    Args:
+        book_id: ID cuốn sách cần xóa.
+
+    Returns:
+        dict: Kết quả thao tác `{"ok": True}`.
+
+    Side-effects:
+        Xóa dữ liệu tương ứng trong các bảng `glossary`, `chunks`, `books` và commit DB.
+    """
     d = _get_db()
     await d.conn.execute("DELETE FROM glossary WHERE book_id = ?", (book_id,))
     await d.conn.execute("DELETE FROM chunks WHERE book_id = ?", (book_id,))
@@ -312,6 +478,18 @@ async def delete_book(book_id: int) -> dict:
 
 @app.patch("/api/books/{book_id}")
 async def update_book(book_id: int, req: UpdateBookRequest) -> dict:
+    """Cập nhật các trường thông tin metadata của cuốn sách trong cơ sở dữ liệu.
+
+    Args:
+        book_id: ID của cuốn sách cần cập nhật.
+        req: Dữ liệu chứa các trường thông tin cập nhật (title, author, localized_title, category, source_lang, target_lang).
+
+    Returns:
+        dict: Kết quả thao tác `{"ok": True}`.
+
+    Side-effects:
+        Cập nhật bản ghi trong bảng `books` và commit DB.
+    """
     d = _get_db()
     sets = []
     params = []
@@ -335,7 +513,18 @@ async def update_book(book_id: int, req: UpdateBookRequest) -> dict:
 
 @app.post("/api/books/{book_id}/analyze")
 async def analyze_book(book_id: int, req: AnalyzeRequest) -> dict:
-    """Web Search Agent: phân tích metadata sách, đề xuất bản địa hóa."""
+    """Sử dụng Web Search Agent để phân tích văn bản xem trước của sách và trích xuất/đề xuất metadata bản địa hóa.
+
+    Args:
+        book_id: ID cuốn sách cần phân tích.
+        req: Cấu hình kết nối API AI (vendor, api_key, model, base_url, user_feedback, force_search).
+
+    Returns:
+        dict: Metadata phân tích được (tiêu đề gốc/dịch, tác giả, ngôn ngữ, thể loại, mô tả, độ tin cậy, nguồn tham khảo).
+
+    Side-effects:
+        Đọc file sách lấy văn bản xem trước, thực hiện tìm kiếm web và gọi API LLM; ném HTTPException (400, 404, 500) nếu lỗi.
+    """
     from ebook_translator.translator.adapters import VENDORS
 
     d = _get_db()
@@ -384,7 +573,18 @@ async def analyze_book(book_id: int, req: AnalyzeRequest) -> dict:
 
 @app.post("/api/books/{book_id}/research")
 async def research_book(book_id: int, req: AnalyzeRequest) -> dict:
-    """Research Agent: phân tích sách 1 lần, trả metadata + glossary. HITL tại đây."""
+    """Sử dụng Research Agent phân tích sách, trích xuất metadata và tự động lưu các gợi ý thuật ngữ vào glossary DB.
+
+    Args:
+        book_id: ID cuốn sách cần nghiên cứu.
+        req: Cấu hình kết nối API AI và phản hồi của người dùng.
+
+    Returns:
+        dict: Kết quả phân tích chi tiết gồm thông tin sách, ghi chú phong cách và danh sách gợi ý thuật ngữ (glossary_suggestions).
+
+    Side-effects:
+        Gửi yêu cầu tới Research Agent, chèn các thuật ngữ gợi ý mới vào bảng `glossary` trong DB; ném HTTPException khi lỗi.
+    """
     from ebook_translator.agent.pipeline import AgentContext, research_agent
     from ebook_translator.translator.adapters import VENDORS
 
@@ -448,7 +648,18 @@ async def research_book(book_id: int, req: AnalyzeRequest) -> dict:
 
 @app.post("/api/books/{book_id}/confirm-metadata")
 async def confirm_metadata(book_id: int, req: ConfirmMetadataRequest) -> dict:
-    """HITL: Lưu metadata user đã duyệt vào DB."""
+    """Lưu thông tin metadata cuốn sách do người dùng xác nhận vào cơ sở dữ liệu sau bước HITL.
+
+    Args:
+        book_id: ID cuốn sách.
+        req: Thông tin metadata đã được người dùng chỉnh sửa/xác nhận.
+
+    Returns:
+        dict: Kết quả thao tác `{"ok": True}`.
+
+    Side-effects:
+        Cập nhật bản ghi bảng `books` trong DB; ném HTTPException (404) nếu không tìm thấy sách.
+    """
     d = _get_db()
     book = await d.get_book(book_id)
     if book is None:
@@ -475,6 +686,18 @@ async def confirm_metadata(book_id: int, req: ConfirmMetadataRequest) -> dict:
 
 @app.get("/api/books/{book_id}/chunks")
 async def list_chunks(book_id: int, status: str | None = None) -> list[dict]:
+    """Lấy danh sách các chunk của một cuốn sách, hỗ trợ lọc theo trạng thái dịch.
+
+    Args:
+        book_id: ID cuốn sách.
+        status: Trạng thái chunk cần lọc (tùy chọn, ví dụ: 'pending', 'done', 'failed').
+
+    Returns:
+        list[dict]: Danh sách thông tin cơ bản của các chunk sắp xếp theo chỉ số chương, đoạn và phân đoạn.
+
+    Side-effects:
+        Truy vấn dữ liệu từ bảng `chunks` trong DB.
+    """
     d = _get_db()
     sql = "SELECT id, chapter_idx, paragraph_idx, segment_idx, status, token_count, error_log FROM chunks WHERE book_id = ?"
     params: list = [book_id]
@@ -489,7 +712,18 @@ async def list_chunks(book_id: int, status: str | None = None) -> list[dict]:
 
 @app.patch("/api/chunks/{chunk_id}")
 async def update_chunk_translation(chunk_id: int, req: UpdateChunkRequest) -> dict:
-    """Persist a user-approved translation. Done chunks are not auto-retranslated."""
+    """Lưu văn bản dịch do người dùng chỉnh sửa cho một chunk và đánh dấu trạng thái chunk là 'done'.
+
+    Args:
+        chunk_id: ID của chunk cần cập nhật.
+        req: Chứa nội dung văn bản dịch mới (`translated_text`).
+
+    Returns:
+        dict: Kết quả thao tác `{"ok": True, "chunk_id": chunk_id}`.
+
+    Side-effects:
+        Cập nhật bảng `chunks` trong DB và tính toán lại trạng thái tiến độ chung của sách; ném HTTPException (404) nếu không tìm thấy chunk.
+    """
     d = _get_db()
     cursor = await d.conn.execute(
         "SELECT book_id FROM chunks WHERE id = ?", (chunk_id,)
@@ -508,7 +742,18 @@ async def update_chunk_translation(chunk_id: int, req: UpdateChunkRequest) -> di
 
 @app.post("/api/chunks/{chunk_id}/translation-memory")
 async def remember_chunk_translation(chunk_id: int, req: UpdateChunkRequest) -> dict:
-    """Explicitly promote a translation into reusable cross-book memory."""
+    """Lưu bản dịch của chunk vào bộ nhớ dịch (Translation Memory) để tái sử dụng giữa các cuốn sách.
+
+    Args:
+        chunk_id: ID của chunk dịch.
+        req: Chứa nội dung dịch cần ghi nhớ (`translated_text`).
+
+    Returns:
+        dict: Kết quả thao tác `{"ok": True, "chunk_id": chunk_id, "stored": "translation_memory"}`.
+
+    Side-effects:
+        Truy vấn DB lấy hash nội dung và văn bản gốc, lưu vào bộ nhớ dịch của Database; ném HTTPException (400, 404) nếu sai dữ liệu.
+    """
     d = _get_db()
     cursor = await d.conn.execute(
         "SELECT c.content_hash, c.original_text, b.source_lang, b.target_lang "
@@ -533,7 +778,17 @@ async def remember_chunk_translation(chunk_id: int, req: UpdateChunkRequest) -> 
 
 @app.post("/api/chunks/{chunk_id}/requeue")
 async def requeue_chunk(chunk_id: int) -> dict:
-    """Mark one chunk retryable without touching its source text."""
+    """Đặt lại trạng thái của chunk thành 'pending' để sẵn sàng dịch lại mà không làm thay đổi văn bản gốc.
+
+    Args:
+        chunk_id: ID của chunk cần đưa lại vào hàng đợi dịch.
+
+    Returns:
+        dict: Thông tin phản hồi `{"ok": True, "chunk_id": chunk_id, "status": "pending"}`.
+
+    Side-effects:
+        Cập nhật bảng `chunks` (đặt `status='pending'`, xóa `error_log`), tính toán lại trạng thái tiến độ sách trong DB; ném HTTPException (404) nếu không tìm thấy chunk.
+    """
     d = _get_db()
     cursor = await d.conn.execute(
         "SELECT book_id FROM chunks WHERE id = ?", (chunk_id,)
@@ -556,7 +811,19 @@ async def book_qa(
     chapter_start: int = 1,
     chapter_end: int = 99999,
 ) -> dict:
-    """Run deterministic QA over translated chunks in the requested scope."""
+    """Thực hiện kiểm tra chất lượng dịch (QA) tự động trên các chunk đã dịch trong phạm vi chương được chọn.
+
+    Args:
+        book_id: ID cuốn sách cần kiểm tra.
+        chapter_start: Chỉ số chương bắt đầu (mặc định 1).
+        chapter_end: Chỉ số chương kết thúc (mặc định 99999).
+
+    Returns:
+        dict: Thống kê số chunk đã kiểm tra, số lỗi/cảnh báo và danh sách thông tin chi tiết các chunk bị lỗi.
+
+    Side-effects:
+        Đọc danh sách thuật ngữ và các chunk đã dịch từ DB, thực hiện thuật toán QA deterministic; ném HTTPException (404) nếu không có sách.
+    """
     from ebook_translator.translator.qa import check_translation
 
     d = _get_db()
@@ -619,7 +886,20 @@ async def reader_chunks(
     chapter_end: int = 99999,
     status_filter: str = "all",
 ) -> dict:
-    """Reader endpoint: tra ve chunks voi original + translated text."""
+    """Lấy danh sách các chunk kèm văn bản gốc và văn bản dịch phục vụ giao diện người đọc (Reader UI).
+
+    Args:
+        book_id: ID cuốn sách.
+        chapter_start: Chỉ số chương bắt đầu.
+        chapter_end: Chỉ số chương kết thúc.
+        status_filter: Bộ lọc theo trạng thái dịch ('all', 'done', 'pending', v.v.).
+
+    Returns:
+        dict: Tổng số chunk, danh sách các chương có sẵn và mảng chi tiết các chunk.
+
+    Side-effects:
+        Truy vấn dữ liệu bảng `chunks` từ cơ sở dữ liệu.
+    """
     d = _get_db()
     sql = (
         "SELECT id, chapter_idx, paragraph_idx, segment_idx, original_text, translated_text, status "
@@ -648,6 +928,17 @@ async def reader_chunks(
 
 @app.get("/api/books/{book_id}/glossary")
 async def get_glossary(book_id: int) -> list[dict]:
+    """Lấy danh sách tất cả các mục thuật ngữ (glossary) thuộc về cuốn sách.
+
+    Args:
+        book_id: ID cuốn sách cần lấy thuật ngữ.
+
+    Returns:
+        list[dict]: Danh sách các đối tượng thuật ngữ (id, source_term, target_term, notes).
+
+    Side-effects:
+        Truy vấn dữ liệu từ bảng `glossary` trong DB.
+    """
     d = _get_db()
     entries = await d.get_glossary(book_id)
     return [
@@ -663,6 +954,17 @@ async def get_glossary(book_id: int) -> list[dict]:
 
 @app.post("/api/glossary")
 async def create_glossary(req: CreateGlossaryRequest) -> dict:
+    """Tạo mới một mục thuật ngữ trong bảng glossary của cuốn sách.
+
+    Args:
+        req: Thông tin thuật ngữ cần tạo (book_id, source_term, target_term, notes).
+
+    Returns:
+        dict: ID của mục thuật ngữ vừa được tạo `{"id": lastrowid}`.
+
+    Side-effects:
+        Thêm bản ghi mới vào bảng `glossary` và commit DB.
+    """
     d = _get_db()
     cursor = await d.conn.execute(
         "INSERT INTO glossary (book_id, source_term, target_term, notes) VALUES (?, ?, ?, ?)",
@@ -674,6 +976,17 @@ async def create_glossary(req: CreateGlossaryRequest) -> dict:
 
 @app.delete("/api/glossary/{entry_id}")
 async def delete_glossary(entry_id: int) -> dict:
+    """Xóa một mục thuật ngữ khỏi cơ sở dữ liệu theo ID mục.
+
+    Args:
+        entry_id: ID của mục thuật ngữ cần xóa.
+
+    Returns:
+        dict: Kết quả thao tác `{"ok": True}`.
+
+    Side-effects:
+        Xóa bản ghi khỏi bảng `glossary` và commit DB.
+    """
     d = _get_db()
     await d.conn.execute("DELETE FROM glossary WHERE id = ?", (entry_id,))
     await d.conn.commit()
@@ -685,6 +998,17 @@ async def delete_glossary(entry_id: int) -> dict:
 
 @app.post("/api/translate/start")
 async def start_translate(req: StartTranslateRequest) -> dict:
+    """Bắt đầu một công việc dịch sách theo chế độ tiêu chuẩn (standard mode) chạy ngầm dưới nền.
+
+    Args:
+        req: Cấu hình tham số dịch (file_path, vendor, api_key, model, ngôn ngữ, phạm vi chương, v.v.).
+
+    Returns:
+        dict: Thông tin job khởi tạo gồm book_id, job_id, status ("started") và mode ("standard").
+
+    Side-effects:
+        Hủy job đang chạy nếu có, tạo hoặc lấy book_id từ DB, khởi tạo bản ghi `translation_job` và chạy tác vụ ngầm `_run_translation`; ném HTTPException (400) nếu lỗi cấu hình.
+    """
     global active_pipeline, active_book_id, active_job_id, _cancel_event
     d = _get_db()
 
@@ -825,6 +1149,14 @@ async def _run_translation(
 
 @app.post("/api/translate/cancel")
 async def cancel_translate() -> dict:
+    """Gửi tín hiệu hủy công việc dịch sách đang chạy và đóng pipeline dịch.
+
+    Returns:
+        dict: Trạng thái phản hồi `{"status": "cancelled"}`.
+
+    Side-effects:
+        Kích hoạt sự kiện `_cancel_event`, đóng `active_pipeline` và cập nhật trạng thái job trong DB thành 'cancelled'.
+    """
     global active_pipeline, active_job_id
     _cancel_event.set()
     if active_pipeline:
@@ -838,7 +1170,17 @@ async def cancel_translate() -> dict:
 
 @app.post("/api/translate/agentic")
 async def translate_agentic(req: StartTranslateRequest) -> dict:
-    """Translate Agent + Deterministic Validation."""
+    """Bắt đầu tiến trình dịch sách theo chế độ Agentic kết hợp tự động kiểm định (Deterministic Validation) chạy ngầm.
+
+    Args:
+        req: Cấu hình dịch (file_path, vendor, api_key, model, phạm vi chương).
+
+    Returns:
+        dict: Thông tin job gồm book_id, job_id, status ("started") và mode ("agentic").
+
+    Side-effects:
+        Hủy job cũ nếu có, tạo `translation_job` và chạy tác vụ ngầm `_run_agentic_translate`; ném HTTPException (400, 404) nếu lỗi.
+    """
     from ebook_translator.agent.pipeline import (
         AgentContext,
     )
@@ -974,7 +1316,19 @@ async def translate_status(
     chapter_start: int = 0,
     chapter_end: int = 99999,
 ) -> dict:
-    """Polling endpoint backed by canonical chunk state for the requested scope."""
+    """Truy vấn tiến độ dịch thực tế của cuốn sách theo phạm vi chương yêu cầu.
+
+    Args:
+        book_id: ID cuốn sách.
+        chapter_start: Chương bắt đầu (mặc định 0).
+        chapter_end: Chương kết thúc (mặc định 99999).
+
+    Returns:
+        dict: Thống kê tiến độ gồm total, done, failed và status của tiến trình.
+
+    Side-effects:
+        Truy vấn dữ liệu tiến độ chunk từ cơ sở dữ liệu.
+    """
     d = _get_db()
     book = await d.get_book(book_id)
     if book is None:
@@ -999,7 +1353,18 @@ async def translate_status(
 
 @app.post("/api/export/{book_id}")
 async def export_book(book_id: int, req: ExportBookRequest) -> dict:
-    """Export với nhiều chế độ: mode (translated|bilingual), format (txt|epub), chapter range."""
+    """Xuất bản dịch của sách ra file theo chế độ (đơn ngữ/song ngữ), định dạng (txt/epub) và khoảng chương tùy chọn.
+
+    Args:
+        book_id: ID cuốn sách cần xuất file.
+        req: Cấu hình tham số xuất (output_path, mode, format, chapter_start, chapter_end).
+
+    Returns:
+        dict: Đường dẫn file xuất (`path`), `mode`, và `format`.
+
+    Side-effects:
+        Đọc dữ liệu từ DB và ghi tập tin kết quả ra đĩa; ném HTTPException (400, 404) nếu lỗi.
+    """
     from ebook_translator.export.export_engine import export_book as do_export
 
     d = _get_db()
@@ -1032,6 +1397,17 @@ async def export_book(book_id: int, req: ExportBookRequest) -> dict:
 
 @app.get("/api/export/{book_id}/download")
 async def download_export(book_id: int):
+    """Tải xuống file sách đã được dịch và xuất ra định dạng EPUB/TXT.
+
+    Args:
+        book_id: ID cuốn sách cần tải về.
+
+    Returns:
+        FileResponse: Phản hồi tập tin tải về cho client.
+
+    Side-effects:
+        Đọc file trên đĩa; ném HTTPException (404) nếu không tìm thấy sách hoặc file xuất chưa tạo.
+    """
     d = _get_db()
     book = await d.get_book(book_id)
     if book is None:
@@ -1049,6 +1425,17 @@ async def download_export(book_id: int):
 
 @app.get("/api/jobs/{book_id}/latest")
 async def latest_translation_job(book_id: int) -> dict:
+    """Lấy thông tin công việc dịch gần đây nhất của một cuốn sách.
+
+    Args:
+        book_id: ID cuốn sách cần kiểm tra.
+
+    Returns:
+        dict: Dữ liệu công việc dịch gần nhất (job_id, status, mode, v.v.).
+
+    Side-effects:
+        Truy vấn DB; ném HTTPException (404) nếu không tìm thấy job dịch nào.
+    """
     job = await _get_db().get_latest_job(book_id)
     if job is None:
         raise HTTPException(status_code=404, detail="No translation job found")
@@ -1057,6 +1444,17 @@ async def latest_translation_job(book_id: int) -> dict:
 
 @app.get("/api/jobs/{job_id}/resume-plan")
 async def job_resume_plan(job_id: int) -> dict:
+    """Lấy kế hoạch tiếp tục công việc dịch bao gồm thông tin job, tiến độ và danh sách ID các chunk chưa dịch.
+
+    Args:
+        job_id: ID công việc dịch.
+
+    Returns:
+        dict: Thông tin kế hoạch gồm `job`, `progress`, và `remaining_chunk_ids`.
+
+    Side-effects:
+        Truy vấn DB; ném HTTPException (404, 409) nếu job không tồn tại hoặc không ở trạng thái tạm dừng/thất bại.
+    """
     try:
         plan = await _get_db().get_job_resume_plan(job_id)
     except KeyError as e:
@@ -1072,6 +1470,18 @@ async def job_resume_plan(job_id: int) -> dict:
 
 @app.post("/api/jobs/{job_id}/resume")
 async def resume_translation_job(job_id: int, req: ResumeJobRequest) -> dict:
+    """Tiếp tục thực thi một công việc dịch sách đã bị tạm dừng hoặc thất bại trước đó.
+
+    Args:
+        job_id: ID của công việc dịch cần tiếp tục.
+        req: Cấu hình thông tin xác thực API key và base_url nếu cần.
+
+    Returns:
+        dict: Kết quả khởi động lại gồm job_id, book_id, status ("running"), mode, và số chunk còn lại (`remaining`).
+
+    Side-effects:
+        Khởi tạo lại pipeline/context dịch, tạo tác vụ ngầm chạy tiếp, cập nhật lại trạng thái job trong DB; ném HTTPException (400, 404, 409) khi có lỗi.
+    """
     global active_pipeline, active_book_id, active_job_id, _cancel_event
 
     if active_job_id is not None:
@@ -1172,6 +1582,17 @@ async def resume_translation_job(job_id: int, req: ResumeJobRequest) -> dict:
 
 @app.get("/api/jobs/{job_id}/diagnostics")
 async def job_diagnostics(job_id: int) -> dict:
+    """Lấy dữ liệu chẩn đoán chi tiết của một công việc dịch theo ID job.
+
+    Args:
+        job_id: ID công việc dịch.
+
+    Returns:
+        dict: Thông tin chẩn đoán lỗi, số lần thử và chi tiết thực thi của job.
+
+    Side-effects:
+        Truy vấn DB; ném HTTPException (404) nếu job không tồn tại.
+    """
     try:
         return await _get_db().get_job_diagnostics(job_id)
     except KeyError as e:
@@ -1180,7 +1601,14 @@ async def job_diagnostics(job_id: int) -> dict:
 
 @app.get("/api/diagnostics")
 async def diagnostics() -> dict:
-    """Local operational counters for diagnosis; no external telemetry."""
+    """Lấy các chỉ số chẩn đoán vận hành hệ thống cục bộ (đếm dữ liệu database và bộ đếm runtime metrics).
+
+    Returns:
+        dict: Dữ liệu chẩn đoán gồm thông tin database và runtime metrics snapshot.
+
+    Side-effects:
+        Đọc trạng thái DB và tạo snapshot chỉ số runtime.
+    """
     from ebook_translator.translator.metrics import snapshot
 
     return {
@@ -1194,7 +1622,14 @@ async def diagnostics() -> dict:
 
 @app.get("/api/vendors")
 async def list_vendors() -> list[dict]:
-    """Danh sach vendor AI ho tro."""
+    """Lấy danh sách các nhà cung cấp AI dịch thuật được hệ thống hỗ trợ kèm mô tả và cấu hình mặc định.
+
+    Returns:
+        list[dict]: Danh sách từ điển thông tin cấu hình của từng vendor AI.
+
+    Side-effects:
+        Đọc dữ liệu từ cấu hình tĩnh `VENDORS`.
+    """
     from ebook_translator.translator.adapters import VENDORS
 
     return [
@@ -1213,7 +1648,18 @@ async def list_vendors() -> list[dict]:
 
 @app.post("/api/vendors/{vendor_id}/models")
 async def get_vendor_models(vendor_id: str, req: TestConnectionRequest) -> list[str]:
-    """Fetch danh sach model that tu vendor API."""
+    """Truy vấn trực tiếp danh sách các mô hình AI khả dụng từ API của nhà cung cấp.
+
+    Args:
+        vendor_id: Mã định danh của vendor AI.
+        req: Thông tin kết nối gồm api_key và base_url.
+
+    Returns:
+        list[str]: Danh sách tên các model hỗ trợ từ vendor.
+
+    Side-effects:
+        Gửi yêu cầu mạng tới API external của vendor; ném HTTPException (502) nếu truy vấn thất bại.
+    """
     from ebook_translator.translator.adapters import fetch_vendor_models
 
     try:
@@ -1228,7 +1674,17 @@ async def get_vendor_models(vendor_id: str, req: TestConnectionRequest) -> list[
 
 @app.post("/api/test-connection")
 async def test_connection(req: TestConnectionRequest) -> dict:
-    """Test API connection voi vendor dang chon."""
+    """Thực hiện kiểm tra kết nối API tới nhà cung cấp AI bằng cách gửi tin nhắn thử nghiệm.
+
+    Args:
+        req: Thông tin cấu hình kết nối (vendor, api_key, model, base_url).
+
+    Returns:
+        dict: Kết quả kiểm tra chứa status ("ok" hoặc "error") và văn bản phản hồi hoặc mô tả lỗi.
+
+    Side-effects:
+        Tạo adapter kết nối và gửi yêu cầu dịch thử tới API vendor với thời gian timeout 15 giây; ném HTTPException (400) nếu chưa chọn model.
+    """
     from ebook_translator.translator.adapters import create_adapter
 
     if not req.model:
@@ -1257,11 +1713,30 @@ async def test_connection(req: TestConnectionRequest) -> dict:
 
 @app.get("/api/categories")
 async def list_categories() -> dict[str, str]:
+    """Lấy danh sách các thể loại sách được hỗ trợ dịch thuật kèm mô tả chi tiết từng thể loại.
+
+    Returns:
+        dict[str, str]: Ánh xạ từ mã thể loại (category code) sang thông tin mô tả thể loại.
+
+    Side-effects:
+        Đọc từ danh mục enum `BookCategory` và từ điển `CATEGORY_INFO`.
+    """
     return {c.value: CATEGORY_INFO[c] for c in BookCategory}
 
 
 @app.get("/api/prompt-preview/{category}")
 async def prompt_preview(category: str) -> dict:
+    """Lấy nội dung system prompt mẫu được áp dụng tương ứng với thể loại sách chỉ định.
+
+    Args:
+        category: Mã thể loại sách cần xem trước prompt.
+
+    Returns:
+        dict: Chứa mã thể loại (`category`) và nội dung câu lệnh hệ thống (`prompt`).
+
+    Side-effects:
+        Ném HTTPException (400) nếu mã thể loại không hợp lệ.
+    """
     try:
         cat = BookCategory(category)
     except ValueError as e:
